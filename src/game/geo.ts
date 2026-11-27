@@ -24,7 +24,7 @@ const deg = (d: number) => (d * Math.PI) / 180;
 
 export const REALM_DEFS: RealmDef[] = [
   {
-    id: 0, name: 'Valmora', adjective: 'Valmoran', angle: deg(150), color: '#4a7fe0', dark: '#1d3a78',
+    id: 0, name: 'Valmora', adjective: 'Valmoran', angle: deg(150), color: '#d9443a', dark: '#6e1a14',
     town: 'Caer Lumen', gate: 'Lumen Gate', zones: ['Lumen Fields', 'Greywater Downs', 'Barrow Moor'],
     blurb: 'Knights and chapter-houses of the old river kingdom. Rolling meadows, stone towers and a stubborn sense of honour.',
   },
@@ -34,7 +34,7 @@ export const REALM_DEFS: RealmDef[] = [
     blurb: 'Clans of the deep green wood, half in this world and half in the mists. Old trees, older bargains.',
   },
   {
-    id: 2, name: 'Hroth', adjective: 'Hrothi', angle: deg(270), color: '#d9443a', dark: '#6e1a14',
+    id: 2, name: 'Hroth', adjective: 'Hrothi', angle: deg(270), color: '#4a7fe0', dark: '#1d3a78',
     town: 'Skelvik', gate: 'Skelvik Gate', zones: ['Skelvik Shore', 'Rimeholt', 'Jotun Wastes'],
     blurb: 'Fjord-holds of the frozen north, where the sagas are sung loud and the winters bite back.',
   },

@@ -7,6 +7,12 @@ export interface Release { version: string; date: string; title: string; notes: 
 
 export const CHANGELOG: Release[] = [
   {
+    version: '0.5.1',
+    date: '2026-11-27',
+    title: 'Valmora wears red, Hroth wears blue',
+    notes: ['Valmora’s colour is now red and Hroth’s is blue, on banners, tabards, keeps, the map and the title screen. Eldwyn stays green.'],
+  },
+  {
     version: '0.5.0',
     date: '2026-11-27',
     title: 'Stealth',

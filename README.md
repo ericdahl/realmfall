@@ -26,7 +26,7 @@ URL options: `?seed=N` builds a different world (default 7), `?fps` shows the fr
 
 ## The game
 
-**Realms.** Valmora (meadows and stone, blue), Eldwyn (deep forest, green) and Hroth (snow and fjords, red) each have a town, a home region walled off from the others by mountains, and a gate fortress onto the shared frontier in the middle.
+**Realms.** Valmora (meadows and stone, red), Eldwyn (deep forest, green) and Hroth (snow and fjords, blue) each have a town, a home region walled off from the others by mountains, and a gate fortress onto the shared frontier in the middle.
 
 **Classes.** Each realm has its own five classes, one for each role:
 
