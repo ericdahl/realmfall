@@ -1,7 +1,7 @@
 import './style.css';
 import { World, dist } from './game/world';
 import type { CharSave, Entity } from './game/types';
-import { ABILITIES, CON_HEX, conColor, CLASSES, MAX_LEVEL, type ClassId } from './game/data';
+import { ABILITIES, CON_HEX, conColor, CLASSES, MAX_LEVEL, OLD_CLASS_ROLE, classFor, type ClassId } from './game/data';
 import { REALM_DEFS, KEEPS, type RealmId } from './game/geo';
 import { makeItem, SLOTS } from './game/items';
 import { Rng } from './game/rng';
@@ -260,8 +260,11 @@ function boot() {
   (window as unknown as { game: typeof game }).game = game;
 
   if (params.has('autostart')) {
-    const cls = (params.get('class') ?? 'warden') as ClassId;
-    const realm = +(params.get('realm') ?? 0) as RealmId;
+    // a class from any realm, or an old shared class name; ?realm= picks that realm's class of the same role
+    const asked = params.get('class') ?? 'warden';
+    const known = CLASSES[asked as ClassId];
+    const realm = (params.has('realm') ? +params.get('realm')! : known?.realm ?? 0) as RealmId;
+    const cls = classFor(realm, known?.arch ?? OLD_CLASS_ROLE[asked] ?? 'tank');
     const c = World.newChar('Tester', realm, cls, seed);
     const lvl = Math.min(MAX_LEVEL, +(params.get('level') ?? 1));
     if (lvl > 1) {

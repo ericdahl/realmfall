@@ -6,7 +6,7 @@ test('create a hero, talk to the porter and reach the frontier', async ({ page }
   await page.goto('/');
   await page.waitForFunction(() => (window as any).game, null, { timeout: 90_000 });
   await expect(page.locator('#title h1')).toHaveText(/Realmfall/i);
-  await page.locator('.cls[data-c="ranger"]').click();
+  await page.locator('.cls[data-c="yeoman"]').click();
   await page.locator('#title input').fill('Smoketest');
   await page.locator('[data-go]').click();
   await expect(page.locator('#pframe .nm')).toHaveText('Smoketest', { timeout: 20_000 });

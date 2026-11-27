@@ -67,7 +67,7 @@ interface Look {
   body: string;
   trim: string;
   cape?: string;
-  weapon: 'sword' | 'bow' | 'staff' | 'mace' | 'none';
+  weapon: 'sword' | 'axe' | 'bow' | 'staff' | 'mace' | 'none';
   shield: boolean;
   helm: 'none' | 'helm' | 'hood' | 'hat' | 'crown';
   skin: string;
@@ -92,12 +92,14 @@ function lookOf(e: Entity): Look {
   const armor = CLASSES[cls].armor;
   let body = armor === 'plate' ? '#9aa0a8' : armor === 'chain' ? '#80868d' : armor === 'leather' ? C.leather : realm ? shade(realm.dark, 1.2) : '#3d4a5a';
   if (e.look?.body) body = e.look.body;
-  let helm: Look['helm'] = cls === 'runecaller' ? 'hat' : cls === 'ranger' ? 'hood' : e.kind === 'guard' || e.kind === 'soldier' ? (cls === 'warden' ? 'helm' : 'none') : 'none';
+  const arch = CLASSES[cls].arch;
+  // Eldwyn's casters and healers go hooded; everyone else's casters wear the pointed hat
+  let helm: Look['helm'] = arch === 'caster' ? (cls === 'mistweaver' ? 'hood' : 'hat') : arch === 'archer' || cls === 'druid' ? 'hood' : e.kind === 'guard' || e.kind === 'soldier' ? (arch === 'tank' ? 'helm' : 'none') : 'none';
   if (e.kind === 'lord') helm = 'crown';
   if (e.kind === 'npc') helm = 'none';
   if (e.look?.helm) helm = 'helm';
   const weapon: Look['weapon'] = e.kind === 'npc' ? 'none' : CLASSES[cls].weapon as Look['weapon'];
-  return { body, trim, cape: realm && (cls === 'warden' || cls === 'cleric' || e.kind === 'lord') ? realm.color : undefined, weapon, shield: CLASSES[cls].block > 0 && e.kind !== 'npc', helm, skin, hair };
+  return { body, trim, cape: realm && (arch === 'tank' || arch === 'healer' || e.kind === 'lord') ? realm.color : undefined, weapon, shield: CLASSES[cls].block > 0 && e.kind !== 'npc', helm, skin, hair };
 }
 
 function humanoid(e: Entity): Rig {
@@ -173,6 +175,12 @@ function humanoid(e: Entity): Rig {
     w.add(mesh(box(0.05, 0.92, 0.1, 0.62), mat('#d5dae0')));
     w.add(mesh(box(0.08, 0.06, 0.34, 0.15), mat('#8a6a2a')));
     w.add(mesh(box(0.06, 0.2, 0.06, 0.02), mat('#3a2a1e')));
+    w.rotation.z = -1.2;
+    hand.add(w);
+  } else if (L.weapon === 'axe') {
+    const w = new THREE.Group();
+    w.add(mesh(box(0.06, 0.82, 0.06, 0.38), mat('#4a3626')));
+    w.add(mesh(box(0.04, 0.26, 0.24, 0.7, 0, 0.12), mat('#c9cdd2')));
     w.rotation.z = -1.2;
     hand.add(w);
   } else if (L.weapon === 'mace') {
@@ -363,7 +371,7 @@ function buildRigRaw(e: Entity): Rig {
   return humanoid(e);
 }
 
-const SCHOOL_COLOR: Record<string, string> = { fire: '#ff8a2a', cold: '#8fd6ff', energy: '#c99bff', holy: '#ffe58a', ranged: '#e8d9b0', melee: '#ffffff', arrow: '#e8d9b0' };
+const SCHOOL_COLOR: Record<string, string> = { fire: '#ff8a2a', cold: '#8fd6ff', energy: '#c99bff', holy: '#ffe58a', nature: '#8fe36a', void: '#9a5cff', light: '#fff6d0', ranged: '#e8d9b0', melee: '#ffffff', arrow: '#e8d9b0' };
 export function schoolColor(s: string) {
   return SCHOOL_COLOR[s] ?? '#ffffff';
 }

@@ -11,7 +11,7 @@ npm run dev        # http://localhost:5173
 
 Play it online at <https://ericdahl.github.io/realmfall/>, published to GitHub Pages from `master`. `npm run build` writes the same static site to `dist/`. Desktop browsers with a keyboard and mouse are the target.
 
-URL options: `?seed=N` builds a different world (default 7), `?fps` shows the frame rate, frame time, draw calls and triangles (also under Menu → Show frame rate), and `?autostart&class=warden|ranger|runecaller|cleric&realm=0|1|2&level=N` skips the title screen with a fresh hero.
+URL options: `?seed=N` builds a different world (default 7), `?fps` shows the frame rate, frame time, draw calls and triangles (also under Menu → Show frame rate), and `?autostart&class=<class>&realm=0|1|2&level=N` skips the title screen with a fresh hero (any class id, such as `warden` or `runecarver`; with `realm`, that realm's class of the same role).
 
 ## Controls
 
@@ -28,16 +28,16 @@ URL options: `?seed=N` builds a different world (default 7), `?fps` shows the fr
 
 **Realms.** Valmora (meadows and stone, blue), Eldwyn (deep forest, green) and Hroth (snow and fjords, red) each have a town, a home region walled off from the others by mountains, and a gate fortress onto the shared frontier in the middle.
 
-**Classes.** Every realm can play all four:
+**Classes.** Each realm has its own four classes, one for each role:
 
-| Class | Plays as |
-|---|---|
-| Warden | Plate and shield. Styles replace the next swing and chain: Slash opens Backhand, Backhand opens Executioner, a parry opens Riposte, and Flank Cut needs you beside or behind the target. |
-| Ranger | A longbow with long draws (Aimed Shot, Heart-Seeker) that any hit ruins, so it snares and opens from range. |
-| Runecaller | The hardest-hitting caster: Fire Bolt, Frost Lance, Thunderclap, Starfall. A single blow interrupts a spell, so it roots, kites and uses Focus. |
-| Cleric | Chain mail, a mace, heals (Mend, Renew, Greater Mend, Sanctuary), a stun and Smite. Slow alone, very welcome in a warband. |
+| Role | Valmora | Eldwyn | Hroth |
+|---|---|---|---|
+| Tank (plate, shield, styles that chain) | Warden: Blades, Shields, Defence | Thornguard: Blades, Shields, Briar (thorns, roots) | Huskarl: Axes, Shields, Fury (Berserk, War Cry) |
+| Archer (long draws any hit ruins) | Yeoman: Archery, Hunting, Survival | Ranger: Archery, Hunting, Glamour (dazzles, illusions) | Hunter: Archery, Hunting, Survival |
+| Caster (hits hardest, interrupted by any blow) | Wizard: Fire, Frost, Storm | Mistweaver: Light, Void (drains), Mana | Runecarver: Runes, Frost, Darkness (drains, dread) |
+| Healer (heals, a stun, damage at range) | Cleric: Restoration, Smiting, Enhancement | Druid: Restoration, Nature, Enhancement | Seer: Restoration, Storm, Augury (haste, foresight) |
 
-**Specialization.** Each class has three lines (Warden: Blades, Shields, Defence; Ranger: Archery, Hunting, Survival; Runecaller: Fire, Frost, Storm; Cleric: Restoration, Smiting, Enhancement). Each level brings 1.5 × that level in points; raising a line from n to n+1 costs n+1, and no line goes above your level. A line unlocks its abilities and sets their strength, so a level 20 hero can max one line and take another to 14, or spread out. Respec in the same window.
+**Specialization.** Each class has the three lines above. Each level brings 1.5 × that level in points; raising a line from n to n+1 costs n+1, and no line goes above your level. A line unlocks its abilities and sets their strength, so a level 20 hero can max one line and take another to 14, or spread out. Respec in the same window.
 
 **Levelling (1–20).** Monster camps get tougher the farther they are from town, and every monster's name is coloured by how it compares to you (grey, green, blue, yellow, orange, red, purple). Wolves call their packmates, brigands fight in gangs, bog sprites and mistcallers cast, trolls and treants slam, a few named monsters roam with better loot, and you can die. The Taskmaster pays for culling monsters, the Merchant sells potions and gear of your level, and loot drops with up to three bonuses. Other heroes of your realm level in the same fields and chatter in region chat.
 

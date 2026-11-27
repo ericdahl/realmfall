@@ -1,6 +1,6 @@
 /** The realm war: keeps, their garrisons, and the warbands each realm sends out to take them. */
 import { REALM_DEFS, siteById, KEEP_HALF, type RealmId, type Site } from './geo';
-import { CLASS_IDS, MOB_BY_ID, armorAf, realmName, type ClassId, type MobDef } from './data';
+import { ROLES, MOB_BY_ID, armorAf, realmName, classFor, type Role, type MobDef } from './data';
 import type { Entity, Team } from './types';
 import { dist, angleTo, type World } from './world';
 import { Rng } from './rng';
@@ -35,12 +35,12 @@ export interface Warband {
 interface Respawn { at: number; def: MobDef; level: number; x: number; z: number; named?: string; delay: number }
 
 const BAND_CAP = 24;
-const GUARD_SLOTS: [number, number, ClassId][] = [
-  [KEEP_HALF - 6, -6, 'warden'],
-  [KEEP_HALF - 6, 6, 'warden'],
-  [KEEP_HALF - 12, -10, 'ranger'],
-  [KEEP_HALF - 12, 10, 'cleric'],
-  [-4, 12, 'runecaller'],
+const GUARD_SLOTS: [number, number, Role][] = [
+  [KEEP_HALF - 6, -6, 'tank'],
+  [KEEP_HALF - 6, 6, 'tank'],
+  [KEEP_HALF - 12, -10, 'archer'],
+  [KEEP_HALF - 12, 10, 'healer'],
+  [-4, 12, 'caster'],
 ];
 const DOOR_HP = 2600;
 const RALLY_SIZE = 10;
@@ -83,7 +83,7 @@ export class War {
       for (let i = 0; i < 4; i++) {
         const a = g.facing + (i - 1.5) * 0.5;
         const x = g.x + Math.cos(a) * 16, z = g.z + Math.sin(a) * 16;
-        const e = this.w.makeCombatant('guard', i % 2 ? 'ranger' : 'warden', r.id, 30, x, z, `${r.adjective} Gate Warden`, 3, 2);
+        const e = this.w.makeCombatant('guard', classFor(r.id, i % 2 ? 'archer' : 'tank'), r.id, 30, x, z, `${r.adjective} Gate Warden`, 3, 2);
         e.ai.post = { x, z, facing: a };
         e.facing = a;
         this.w.add(e);
@@ -91,10 +91,10 @@ export class War {
     }
   }
 
-  private guardName(owner: Team, cls: ClassId) {
-    if (owner === -1) return cls === 'ranger' ? 'mistborn archer' : cls === 'runecaller' ? 'mistborn seer' : cls === 'cleric' ? 'mistborn keeper' : 'mistborn sentinel';
+  private guardName(owner: Team, role: Role) {
+    if (owner === -1) return role === 'archer' ? 'mistborn archer' : role === 'caster' ? 'mistborn seer' : role === 'healer' ? 'mistborn keeper' : 'mistborn sentinel';
     const adj = REALM_DEFS[owner].adjective;
-    return `${adj} ${cls === 'ranger' ? 'Archer' : cls === 'runecaller' ? 'Magus' : cls === 'cleric' ? 'Chaplain' : 'Guard'}`;
+    return `${adj} ${role === 'archer' ? 'Archer' : role === 'caster' ? 'Magus' : role === 'healer' ? 'Chaplain' : 'Guard'}`;
   }
 
   private garrison(k: KeepState, full: boolean) {
@@ -123,7 +123,7 @@ export class War {
     // the lord
     const lp = w.keepToWorld(k.site, -10, 0);
     const lordName = owner === -1 ? 'the Mist Warden' : `Lord of ${k.site.name}`;
-    const lord = w.makeCombatant('lord', 'warden', (owner === -1 ? 0 : owner) as RealmId, 22, lp.x, lp.z, lordName, 5, 1.4);
+    const lord = w.makeCombatant('lord', classFor((owner === -1 ? 0 : owner) as RealmId, 'tank'), (owner === -1 ? 0 : owner) as RealmId, 22, lp.x, lp.z, lordName, 5, 1.4);
     lord.realm = owner;
     lord.keep = k.index;
     lord.scale = 1.25;
@@ -139,15 +139,16 @@ export class War {
 
   private addGuard(k: KeepState, slot: number) {
     const w = this.w;
-    const [u, v, cls] = GUARD_SLOTS[slot];
+    const [u, v, role] = GUARD_SLOTS[slot];
     const p = w.keepToWorld(k.site, u, v);
-    const g = w.makeCombatant('guard', cls, (k.owner === -1 ? 0 : k.owner) as RealmId, 19, p.x, p.z, this.guardName(k.owner, cls), 1.25, 1);
+    const realm = (k.owner === -1 ? 0 : k.owner) as RealmId;
+    const g = w.makeCombatant('guard', classFor(realm, role), realm, 19, p.x, p.z, this.guardName(k.owner, role), 1.25, 1);
     g.realm = k.owner;
     g.keep = k.index;
     g.ai.post = { x: p.x, z: p.z, facing: k.site.facing };
     g.facing = k.site.facing;
     (g as Entity & { slot?: number }).slot = slot;
-    if (k.owner === -1) g.look = { body: '#3d4a5a', trim: '#9fb2c8', helm: cls === 'warden' };
+    if (k.owner === -1) g.look = { body: '#3d4a5a', trim: '#9fb2c8', helm: role === 'tank' };
     w.add(g);
     k.guardIds.push(g.id);
   }
@@ -246,7 +247,7 @@ export class War {
         // the lord was killed but the keep held (no other realm had the most damage): a new lord arrives
         w.remove(lord);
         const lp = w.keepToWorld(k.site, -10, 0);
-        const nl = w.makeCombatant('lord', 'warden', (k.owner === -1 ? 0 : k.owner) as RealmId, 22, lp.x, lp.z, lord.name, 5, 1.4);
+        const nl = w.makeCombatant('lord', classFor((k.owner === -1 ? 0 : k.owner) as RealmId, 'tank'), (k.owner === -1 ? 0 : k.owner) as RealmId, 22, lp.x, lp.z, lord.name, 5, 1.4);
         Object.assign(nl, { realm: k.owner, keep: k.index, scale: 1.25, look: lord.look });
         nl.ai.post = { x: lp.x, z: lp.z, facing: k.site.facing };
         w.add(nl);
@@ -352,7 +353,7 @@ export class War {
     const n = size ?? this.rng.int(6, 9);
     const rr = () => this.rng.next();
     for (let i = 0; i < n; i++) {
-      const cls = i === 0 ? 'warden' : this.rng.weighted(CLASS_IDS, (c) => (c === 'warden' ? 0.32 : c === 'cleric' ? 0.26 : 0.21));
+      const cls = classFor(realm, i === 0 ? 'tank' : this.rng.weighted(ROLES, (c) => (c === 'tank' ? 0.32 : c === 'healer' ? 0.26 : 0.21)));
       const x = g.x + Math.cos(g.facing) * (12 + this.rng.range(0, 8)) + this.rng.range(-5, 5);
       const z = g.z + Math.sin(g.facing) * (12 + this.rng.range(0, 8)) + this.rng.range(-5, 5);
       const e = w.makeCombatant('soldier', cls, realm, this.rng.int(16, 20), x, z, realmName(realm, rr));

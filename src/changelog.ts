@@ -7,6 +7,18 @@ export interface Release { version: string; date: string; title: string; notes: 
 
 export const CHANGELOG: Release[] = [
   {
+    version: '0.4.0',
+    date: '2026-11-27',
+    title: 'A class for every realm',
+    notes: [
+      'Each realm now has its own four classes. Valmora: Warden, Yeoman, Wizard and Cleric. Eldwyn: Thornguard, Ranger, Mistweaver and Druid. Hroth: Huskarl, Hunter, Runecarver and Seer.',
+      'Classes of the same role share some lines and differ in others. The Thornguard grows Thorn Skin and roots with briars; the Huskarl fights with an axe, Berserk and War Cry; the Ranger dazzles with glamour; the Mistweaver drains life through the void; the Runecarver binds with runes and drinks life through the dark; the Druid stings with swarms; the Seer calls lightning and hastes its realm-mates.',
+      'About forty new abilities, with new effects: thorns that hurt whoever hits you, dazzles that make enemies miss, haste, and spells that heal you for part of the damage they do.',
+      'Soldiers, guards and keep lords fight as their own realm’s classes, so the frontier sees each realm fight differently.',
+      'Your heroes become their realm’s class of the same role (a Runecaller of Hroth is now a Runecarver, a Ranger of Valmora a Yeoman). Line levels carry over to the line in the same place, and every hero gets a free respec.',
+    ],
+  },
+  {
     version: '0.3.1',
     date: '2026-11-27',
     title: 'A tidier endurance bar',

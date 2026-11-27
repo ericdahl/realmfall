@@ -8,7 +8,7 @@ export type Kind = 'player' | 'mob' | 'soldier' | 'guard' | 'lord' | 'door' | 'n
 export type NpcRole = 'merchant' | 'teleporter' | 'healer' | 'taskmaster' | 'gatekeeper';
 
 export interface Effect {
-  type: 'stun' | 'root' | 'snare' | 'dot' | 'hot' | 'buff' | 'absorb' | 'focus' | 'taunt' | 'freedom';
+  type: 'stun' | 'root' | 'snare' | 'dot' | 'hot' | 'buff' | 'absorb' | 'focus' | 'taunt' | 'freedom' | 'thorns';
   name: string;
   until: number;
   start: number;

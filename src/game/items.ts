@@ -1,5 +1,5 @@
 import type { Rng } from './rng';
-import { CLASSES, STATS, weaponDps, armorAf, type ClassId, type StatId, type WeaponKind } from './data';
+import { CLASSES, WEAPONS, STATS, weaponDps, armorAf, type ClassId, type Role, type StatId, type WeaponKind } from './data';
 
 export type Slot = 'weapon' | 'helm' | 'chest' | 'legs' | 'hands' | 'feet';
 export const SLOTS: Slot[] = ['weapon', 'helm', 'chest', 'legs', 'hands', 'feet'];
@@ -26,7 +26,7 @@ export const RARITY_NAMES = ['Common', 'Fine', 'Superior', 'Artifact'];
 export const RARITY_HEX = ['#e8e4da', '#5fd068', '#4aa3ff', '#c77dff'];
 
 const BASES: Record<Slot, Record<string, string[]>> = {
-  weapon: { sword: ['Arming Sword', 'Broadsword', 'Bastard Sword', 'Runeblade'], bow: ['Hunting Bow', 'Longbow', 'Recurve Bow', 'Warbow'], staff: ['Oak Staff', 'Runed Staff', 'Spellstave', 'Archstaff'], mace: ['Cudgel', 'Flanged Mace', 'Morning Star', 'Sanctum Mace'] },
+  weapon: { sword: ['Arming Sword', 'Broadsword', 'Bastard Sword', 'Runeblade'], axe: ['Hand Axe', 'Bearded Axe', 'War Axe', 'Rune Axe'], bow: ['Hunting Bow', 'Longbow', 'Recurve Bow', 'Warbow'], staff: ['Oak Staff', 'Runed Staff', 'Spellstave', 'Archstaff'], mace: ['Cudgel', 'Flanged Mace', 'Morning Star', 'Sanctum Mace'] },
   helm: { plate: ['Pot Helm', 'Great Helm'], chain: ['Coif', 'Mail Hood'], leather: ['Leather Cap', 'Ranger Hood'], cloth: ['Cowl', 'Circlet'] },
   chest: { plate: ['Breastplate', 'Cuirass'], chain: ['Hauberk', 'Mail Shirt'], leather: ['Jerkin', 'Brigandine'], cloth: ['Robe', 'Vestments'] },
   legs: { plate: ['Greaves', 'Cuisses'], chain: ['Chausses', 'Mail Leggings'], leather: ['Leggings', 'Breeches'], cloth: ['Trousers', 'Pantaloons'] },
@@ -40,11 +40,11 @@ const SUFFIX: Partial<Record<Bonus, string>> = {
   str: 'of the Bear', con: 'of the Oak', dex: 'of the Fox', int: 'of the Owl', pie: 'of the Dawn', hp: 'of Vigor',
 };
 
-const CLASS_STATS: Record<ClassId, Bonus[]> = {
-  warden: ['str', 'con', 'dex', 'hp'],
-  ranger: ['dex', 'con', 'str', 'hp'],
-  runecaller: ['int', 'dex', 'con', 'hp'],
-  cleric: ['pie', 'con', 'str', 'hp'],
+const ROLE_STATS: Record<Role, Bonus[]> = {
+  tank: ['str', 'con', 'dex', 'hp'],
+  archer: ['dex', 'con', 'str', 'hp'],
+  caster: ['int', 'dex', 'con', 'hp'],
+  healer: ['pie', 'con', 'str', 'hp'],
 };
 
 let uidSeq = 1;
@@ -65,7 +65,7 @@ export function makeItem(rng: Rng, cls: ClassId, level: number, opts: { rarity?:
   const rarity = opts.rarity ?? (rng.chance(0.08) ? 2 : rng.chance(0.35) ? 1 : 0);
   const quality = opts.quality ?? Math.round(rng.range(0.86, 1) * 100) / 100;
   const bonuses: Partial<Record<Bonus, number>> = {};
-  const pool = CLASS_STATS[cls];
+  const pool = ROLE_STATS[def.arch];
   const n = rarity === 0 ? 0 : rarity === 1 ? 1 : rarity === 2 ? 2 : 3;
   const chosen: Bonus[] = [];
   for (let i = 0; i < n; i++) {
@@ -79,7 +79,7 @@ export function makeItem(rng: Rng, cls: ClassId, level: number, opts: { rarity?:
   if (slot === 'weapon') {
     base = BASES.weapon[def.weapon][tier(level)];
     const wk = def.weapon;
-    it = { uid: nextUid(), name: base, slot, level, quality, rarity, weapon: wk, dps: Math.round(weaponDps(level, quality) * 10) / 10, speed: wk === 'bow' ? 4.2 : wk === 'staff' ? 4.0 : wk === 'sword' ? 3.4 : 3.6, bonuses, value: 0 };
+    it = { uid: nextUid(), name: base, slot, level, quality, rarity, weapon: wk, dps: Math.round(weaponDps(level, quality) * 10) / 10, speed: WEAPONS[wk].speed, bonuses, value: 0 };
   } else {
     const opts2 = BASES[slot][def.armor];
     base = opts2[Math.min(opts2.length - 1, Math.floor(tier(level) / 2))];

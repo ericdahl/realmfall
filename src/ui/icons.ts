@@ -3,7 +3,7 @@ const cache = new Map<string, string>();
 
 const BG: Record<string, [string, string]> = {
   melee: ['#6b5a48', '#2a2018'], ranged: ['#4f6a3a', '#1c2614'], fire: ['#b8431c', '#3a1006'], cold: ['#3d7fb0', '#0e2234'],
-  energy: ['#6a4bb0', '#1e1236'], holy: ['#c9a23a', '#3a2a08'], potion: ['#7a2030', '#2a0810'], potion2: ['#203a7a', '#08102a'],
+  energy: ['#6a4bb0', '#1e1236'], holy: ['#c9a23a', '#3a2a08'], nature: ['#4f8a2e', '#14260a'], void: ['#3a1f5a', '#0a0414'], light: ['#d8c88a', '#4a4020'], potion: ['#7a2030', '#2a0810'], potion2: ['#203a7a', '#08102a'],
 };
 
 export function iconUrl(key: string, school: string): string {
@@ -112,6 +112,29 @@ function draw(g: CanvasRenderingContext2D, key: string) {
     case 'wardfaith': draw(g, 'shield'); g.lineWidth = 2; line(g, [24, 28, 40, 28]); break;
     case 'resolve': g.lineWidth = 4; line(g, [32, 54, 32, 18]); line(g, [20, 30, 32, 16, 44, 30]); g.lineWidth = 2; circle(g, 32, 34, 22); break;
     case 'faithshield': g.lineWidth = 3; circle(g, 32, 32, 22); circle(g, 32, 32, 14); line(g, [32, 22, 32, 42]); line(g, [24, 30, 40, 30]); break;
+    // realm class abilities
+    case 'gash': draw(g, 'axe'); g.fillStyle = '#c0392b'; for (const [x, y] of [[20, 44], [26, 50], [16, 52]]) circle(g, x, y, 3, true); break;
+    case 'skull': circle(g, 32, 28, 16, true); g.fillRect(24, 38, 16, 12); g.fillStyle = '#1a1010'; circle(g, 26, 28, 4, true); circle(g, 38, 28, 4, true); g.fillRect(30, 34, 4, 5); break;
+    case 'whirl': draw(g, 'axe'); g.lineWidth = 2; g.beginPath(); g.arc(32, 32, 26, 0.2, Math.PI * 1.4); g.stroke(); break;
+    case 'rage': g.beginPath(); g.moveTo(14, 54); g.lineTo(20, 22); g.lineTo(28, 38); g.lineTo(32, 10); g.lineTo(36, 38); g.lineTo(44, 22); g.lineTo(50, 54); g.closePath(); g.fill(); break;
+    case 'warcry': draw(g, 'horn'); g.lineWidth = 2; for (const r of [10, 16]) { g.beginPath(); g.arc(52, 24, r, -0.8, 0.8); g.stroke(); } break;
+    case 'thorns': g.lineWidth = 4; g.beginPath(); g.moveTo(10, 50); g.quadraticCurveTo(32, 20, 54, 14); g.stroke(); for (const [x, y, dx, dy] of [[20, 38, -6, -8], [30, 30, 2, 8], [40, 22, -4, -8], [48, 17, 4, 8]]) { g.beginPath(); g.moveTo(x - 3, y); g.lineTo(x + dx, y + dy); g.lineTo(x + 3, y); g.fill(); } break;
+    case 'vines': g.lineWidth = 3; for (const o of [-10, 0, 10]) { g.beginPath(); g.moveTo(32 + o, 56); g.bezierCurveTo(20 + o, 40, 44 + o, 28, 32 + o, 10); g.stroke(); } break;
+    case 'bramble': draw(g, 'thorns'); g.save(); g.translate(64, 0); g.scale(-1, 1); draw(g, 'thorns'); g.restore(); break;
+    case 'dazzle': for (let i = 0; i < 4; i++) { g.save(); g.translate(32, 32); g.rotate((i * Math.PI) / 4); g.beginPath(); g.moveTo(0, -24); g.lineTo(4, 0); g.lineTo(0, 24); g.lineTo(-4, 0); g.closePath(); g.fill(); g.restore(); } break;
+    case 'shimmer': g.globalAlpha = 0.45; g.fillRect(14, 14, 22, 36); g.globalAlpha = 1; g.lineWidth = 3; g.strokeRect(28, 14, 22, 36); break;
+    case 'lance': g.beginPath(); g.moveTo(54, 10); g.lineTo(18, 40); g.lineTo(24, 46); g.closePath(); g.fill(); line(g, [20, 44, 10, 54]); circle(g, 50, 14, 6); break;
+    case 'void': circle(g, 32, 32, 14, true); g.lineWidth = 2; g.beginPath(); g.ellipse(32, 32, 26, 9, -0.4, 0, Math.PI * 2); g.stroke(); g.fillStyle = '#0a0414'; circle(g, 32, 32, 8, true); break;
+    case 'entropy': g.lineWidth = 3; g.beginPath(); for (let i = 0; i < 40; i++) { const a = i * 0.45, r = 2 + i * 0.6; const x = 32 + Math.cos(a) * r, y = 32 + Math.sin(a) * r; if (i) g.lineTo(x, y); else g.moveTo(x, y); } g.stroke(); break;
+    case 'drain': circle(g, 46, 18, 8, true); circle(g, 18, 46, 8); g.lineWidth = 3; g.beginPath(); g.moveTo(40, 24); g.quadraticCurveTo(40, 44, 24, 42); g.stroke(); g.beginPath(); g.moveTo(24, 36); g.lineTo(22, 44); g.lineTo(30, 46); g.stroke(); break;
+    case 'oblivion': g.lineWidth = 3; circle(g, 32, 32, 22); circle(g, 32, 32, 14); g.fillStyle = '#0a0414'; circle(g, 32, 32, 9, true); break;
+    case 'surge': g.beginPath(); g.moveTo(32, 8); g.lineTo(44, 28); g.lineTo(36, 28); g.lineTo(40, 56); g.lineTo(22, 30); g.lineTo(30, 30); g.closePath(); g.fill(); g.lineWidth = 2; circle(g, 32, 32, 26); break;
+    case 'rune': g.lineWidth = 4; line(g, [24, 10, 24, 54]); line(g, [24, 14, 42, 26, 24, 36]); line(g, [24, 36, 44, 54]); break;
+    case 'binding': draw(g, 'rune'); g.lineWidth = 2; circle(g, 32, 32, 26); break;
+    case 'greatrune': g.lineWidth = 3; circle(g, 32, 32, 26); line(g, [32, 8, 32, 56]); line(g, [32, 18, 46, 30, 32, 40]); line(g, [32, 18, 18, 30, 32, 40]); break;
+    case 'siphon': draw(g, 'drain'); g.lineWidth = 2; circle(g, 32, 32, 27); break;
+    case 'swarm': for (const [x, y] of [[20, 20], [36, 16], [46, 30], [28, 34], [16, 44], [40, 46], [50, 50], [24, 52]]) { circle(g, x, y, 3, true); g.lineWidth = 1.5; line(g, [x - 4, y - 3, x + 4, y - 3]); } break;
+    case 'haste': g.beginPath(); g.moveTo(38, 8); g.lineTo(20, 34); g.lineTo(32, 34); g.lineTo(26, 56); g.lineTo(46, 28); g.lineTo(34, 28); g.closePath(); g.fill(); g.lineWidth = 3; line(g, [6, 22, 16, 22]); line(g, [4, 34, 14, 34]); line(g, [6, 46, 16, 46]); break;
     default: circle(g, 32, 32, 14);
   }
 }

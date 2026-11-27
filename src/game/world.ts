@@ -6,7 +6,7 @@ import { Rng } from './rng';
 import { Geo, REALM_DEFS, KEEPS, siteById, KEEP_HALF, FRONTIER_R, type RealmId, type Site } from './geo';
 import {
   ABILITIES, CLASSES, MOB_BY_ID, WEAPONS, RUN_SPEED, SPRINT_SPEED, MAX_LEVEL, xpToNext, mobXp, conColor, CON_XP,
-  realmRank, RANK_TITLES, type AbilityDef, type ClassId, type MobDef, type EffectDef, type BuffStat,
+  realmRank, RANK_TITLES, classFor, type AbilityDef, type ClassId, type MobDef, type EffectDef, type BuffStat,
 } from './data';
 import { classDerived, mobDerived } from './stats';
 import { makeItem, potion, starterKit, SLOTS, shopPrice, type Item } from './items';
@@ -17,8 +17,8 @@ import { populate } from './spawn';
 import { clamp } from './noise';
 import { LINES, BUILDS, autoSpec, baseSpecs, knownAbilities, lineOf, passiveFrac, freePoints, pointsForLevel, respecCost } from './specs';
 
-/** 2: specialization lines (`specs`). */
-export const SAVE_VERSION = 2;
+/** 2: specialization lines (`specs`). 3: a class for each realm (`cls`). */
+export const SAVE_VERSION = 3;
 export const TICK = 1 / 20;
 
 export interface Segment { ax: number; az: number; bx: number; bz: number; door?: number }
@@ -212,7 +212,7 @@ export class World {
     e.invulnerable = true;
     e.facing = facing;
     e.maxHp = e.hp = 1000;
-    e.cls = role === 'merchant' ? 'ranger' : role === 'healer' ? 'cleric' : role === 'teleporter' || role === 'gatekeeper' ? 'runecaller' : 'warden';
+    e.cls = classFor(realm, role === 'merchant' ? 'archer' : role === 'healer' ? 'healer' : role === 'teleporter' || role === 'gatekeeper' ? 'caster' : 'tank');
     return e;
   }
 
@@ -255,7 +255,7 @@ export class World {
     return {
       version: SAVE_VERSION, id: `${Date.now().toString(36)}${Math.floor(rng.next() * 1e6).toString(36)}`,
       name, realm, cls, level: 1, xp: 0, copper: 150, rp: 0, specs,
-      equip: starterKit(rng, cls), bag: [], potions: { health: 3, power: cls === 'runecaller' || cls === 'cleric' ? 2 : 0 },
+      equip: starterKit(rng, cls), bag: [], potions: { health: 3, power: CLASSES[cls].powerStat ? 2 : 0 },
       hotbar, x: town.x + Math.cos(town.facing) * 8, z: town.z + Math.sin(town.facing) * 8,
       kills: 0, realmKills: 0, deaths: 0, task: null, created: Date.now(), played: 0,
     };
@@ -609,6 +609,7 @@ export class World {
       this.plog(e, 'You catch your second wind.', 'spell');
       return;
     }
+    if (def.type === 'thorns') name = 'Thorn Skin';
     if (def.type === 'freedom') { name = 'Stand Fast'; e.effects = e.effects.filter((f) => f.type !== 'snare' && f.type !== 'root'); }
     if ((def.type === 'snare' || def.type === 'root') && this.has(e, 'freedom')) {
       this.plog(src, `${cap(e.name)} stands fast!`, 'error');
@@ -637,7 +638,7 @@ export class World {
     if (def.type === 'stun') { this.plog(e, 'You are stunned!', 'hit-in'); this.plog(src, `${cap(e.name)} is stunned!`, 'spell'); }
     if (def.type === 'root') { this.plog(e, 'You are rooted to the ground!', 'hit-in'); this.plog(src, `${cap(e.name)} is rooted!`, 'spell'); }
     if (def.type === 'snare') this.plog(src, `${cap(e.name)} slows down!`, 'spell');
-    if (def.type === 'buff' || def.type === 'absorb' || def.type === 'hot' || def.type === 'freedom') this.events.push({ type: 'buff', id: e.id, name });
+    if (def.type === 'buff' || def.type === 'absorb' || def.type === 'hot' || def.type === 'freedom' || def.type === 'thorns') this.events.push({ type: 'buff', id: e.id, name });
   }
 
   private updateEffects(e: Entity) {
@@ -657,7 +658,7 @@ export class World {
           const im = ((e as Entity & { immune?: Record<string, number> }).immune ??= {});
           im[f.type] = now + (f.type === 'stun' ? 8 : 12);
         }
-        if (e === this.player && (f.type === 'buff' || f.type === 'absorb' || f.type === 'freedom')) this.log(`${f.name} fades.`, 'spell');
+        if (e === this.player && (f.type === 'buff' || f.type === 'absorb' || f.type === 'freedom' || f.type === 'thorns')) this.log(`${f.name} fades.`, 'spell');
       }
     }
   }
@@ -701,7 +702,7 @@ export class World {
       return;
     }
     const speedMul = ranged ? 1 : w.ranged ? 0.75 : 1;
-    e.swingAt = this.t + w.speed * speedMul;
+    e.swingAt = this.t + (w.speed * speedMul) / (1 + this.buffSum(e, 'haste'));
     this.swing(e, t, ranged);
   }
 
@@ -743,6 +744,7 @@ export class World {
       this.log(`${capNm(a)} ${verb} you${style ? ` with ${style.name}` : ''} for ${amount} damage!${crit ? ' (Critical hit!)' : ''}`, 'hit-in');
     }
     this.damage(d, a, amount, ranged ? 'arrow' : 'melee', crit, 'hit');
+    if (!ranged) this.thorns(d, a, amount);
     if (style?.effects) for (const f of style.effects) this.addEffect(d, a, f, amount);
   }
 
@@ -756,6 +758,16 @@ export class World {
       if (behind < Math.PI / 3 && d.target === a.id) return 'You must be beside or behind your target!';
     }
     return null;
+  }
+
+  /** Thorn Skin: part of a melee hit comes back on the attacker. */
+  private thorns(d: Entity, a: Entity, amount: number) {
+    const f = d.effects.find((x) => x.type === 'thorns');
+    if (!f || a.dead || d.dead) return;
+    const back = Math.max(1, Math.round(amount * f.value));
+    if (a === this.player) this.log(`Thorns bite you for ${back} damage!`, 'hit-in');
+    else if (d === this.player) this.log(`Your thorns bite ${nm(a)} for ${back} damage!`, 'hit-out');
+    this.damage(a, d, back, 'nature', false, 'hit');
   }
 
   /** Weapon lines: three-quarters damage at 1, full damage at your level. */
@@ -779,11 +791,11 @@ export class World {
   private defenseRoll(a: Entity, d: Entity, kind: 'melee' | 'ranged' | 'spell'): 'hit' | 'miss' | 'parry' | 'block' | 'evade' | 'resist' {
     const ld = d.level - a.level;
     if (kind === 'spell') {
-      const resist = clamp(0.04 + ld * 0.03, 0.01, 0.4);
+      const resist = clamp(0.04 + ld * 0.03 - this.buffSum(a, 'hit'), 0.01, 0.6);
       return this.rng.chance(resist) ? 'resist' : 'hit';
     }
     if (d.kind === 'door') return 'hit';
-    const miss = clamp(0.1 + ld * 0.025, 0.03, 0.45);
+    const miss = clamp(0.1 + ld * 0.025 - this.buffSum(a, 'hit'), 0.03, 0.6);
     if (this.rng.chance(miss)) return 'miss';
     if (this.stunned(d) || d.cast) return 'hit';
     const front = Math.abs(angDiff(angleTo(d, a), d.facing)) < 1.2;
@@ -958,7 +970,7 @@ export class World {
       let focus = false;
       const fi = e.effects.findIndex((f) => f.type === 'focus');
       if (fi >= 0 && ab.kind === 'spell') { focus = true; e.effects.splice(fi, 1); }
-      e.cast = { ab: abId, start: this.t, end: this.t + (ab.cast ?? 2), target: target?.id ?? e.id, focus };
+      e.cast = { ab: abId, start: this.t, end: this.t + (ab.cast ?? 2) / (1 + this.buffSum(e, 'haste')), target: target?.id ?? e.id, focus };
       this.events.push({ type: 'castStart', id: e.id, ab: abId });
       if (e === this.player) this.log(ab.kind === 'shot' ? `You prepare a ${ab.name}!` : `You begin casting a ${ab.name} spell!`, 'spell');
       if (target && this.hostile(e, target)) e.lastCombat = this.t;
@@ -996,7 +1008,7 @@ export class World {
 
   private spellAmount(e: Entity, ab: AbilityDef) {
     const [a, b] = ab.power!;
-    const stat = ab.school === 'holy' ? 'pie' : 'int';
+    const stat = (e.cls && CLASSES[e.cls].powerStat) || (ab.school === 'holy' ? 'pie' : 'int');
     const mul = e.mob ? 0.85 * e.dmgMul * (1 + this.buffSum(e, 'dmg')) : this.statMul(e, stat);
     return (a + b * this.powerLevel(e, ab)) * mul * this.rng.range(0.9, 1.1);
   }
@@ -1063,6 +1075,8 @@ export class World {
         if (e === this.player) this.log(`You hit ${nm(v)} with ${ab.name} for ${amount} damage!${crit ? ' (Critical hit!)' : ''}`, 'hit-out');
         else if (v === this.player) this.log(`${capNm(e)} hits you with ${ab.name} for ${amount} damage!`, 'hit-in');
         this.damage(v, e, amount, ab.school, crit, 'hit');
+        if (ab.drain && !e.dead) this.heal(e, e, amount * ab.drain);
+        if (ab.bonus !== undefined && ab.school === 'melee') this.thorns(v, e, amount);
       }
       for (const f of ab.effects ?? []) if (!v.dead) this.addEffect(v, e, f, amount);
     }
@@ -1233,7 +1247,7 @@ export class World {
       this.giveItem(it);
     }
     if (this.rng.chance(0.06)) {
-      const kind = ch.cls === 'runecaller' || ch.cls === 'cleric' ? (this.rng.chance(0.5) ? 'power' : 'health') : 'health';
+      const kind = CLASSES[ch.cls].powerStat ? (this.rng.chance(0.5) ? 'power' : 'health') : 'health';
       ch.potions[kind]++;
       this.log(`You pick up a ${kind === 'health' ? 'Healing Draught' : 'Draught of Clarity'}.`, 'loot');
     }

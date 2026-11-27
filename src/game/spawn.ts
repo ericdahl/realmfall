@@ -1,6 +1,6 @@
 /** Fills a new world: towns and their people, monster camps, adventurers and the realm war. */
 import { REALM_DEFS, siteById, FRONTIER_R, WORLD_R, GATE_R, homeLevel, roadDist } from './geo';
-import { MOBS, NAMED, CLASS_IDS, realmName, type MobDef } from './data';
+import { MOBS, NAMED, ROLES, classFor, realmName, type MobDef } from './data';
 import { Rng } from './rng';
 import type { World } from './world';
 import type { NpcRole } from './types';
@@ -25,7 +25,7 @@ export function populate(w: World) {
     for (let i = 0; i < 4; i++) {
       const a = town.facing + Math.PI / 4 + (i * Math.PI) / 2;
       const x = town.x + Math.cos(a) * 52, z = town.z + Math.sin(a) * 52;
-      const g = w.makeCombatant('guard', i % 2 ? 'ranger' : 'warden', r.id, 25, x, z, `${r.adjective} Town Guard`, 2.5, 1.8);
+      const g = w.makeCombatant('guard', classFor(r.id, i % 2 ? 'archer' : 'tank'), r.id, 25, x, z, `${r.adjective} Town Guard`, 2.5, 1.8);
       g.ai.post = { x, z, facing: a };
       g.facing = a;
       w.add(g);
@@ -75,7 +75,7 @@ export function populate(w: World) {
     // other adventurers of the realm, out levelling
     for (let i = 0; i < 9; i++) {
       const level = 1 + Math.floor((i / 9) * 18) + rng.int(0, 1);
-      const cls = rng.pick(CLASS_IDS);
+      const cls = classFor(r.id, rng.pick(ROLES));
       const a = town.facing + rng.range(-1, 1);
       const d = 60 + (level - 1) * 27;
       const x = town.x + Math.cos(a) * d, z = town.z + Math.sin(a) * d;

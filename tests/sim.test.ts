@@ -1,8 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { World, SAVE_VERSION } from '../src/game/world';
-import { MOB_BY_ID, ABILITIES, CLASS_IDS } from '../src/game/data';
-import { autoSpec, BUILDS, freePoints, lineCost, pointsAt, respecCost, spent } from '../src/game/specs';
-import { migrateSpecs } from '../src/ui/save';
+import { MOB_BY_ID, ABILITIES, CLASS_IDS, CLASSES, ROLES } from '../src/game/data';
+import { REALM_DEFS } from '../src/game/geo';
+import { LINES, autoSpec, BUILDS, freePoints, lineCost, pointsAt, respecCost, spent } from '../src/game/specs';
+import { migrateChar } from '../src/ui/save';
 
 describe('realm war', () => {
   it('keeps change hands within twenty minutes, and no realm takes everything', () => {
@@ -35,9 +36,9 @@ describe('combat', () => {
 
   it('a hit interrupts a spell, Focus prevents it', () => {
     const w = new World(3, { populate: false, headless: true });
-    const c = World.newChar('Bot', 1, 'runecaller', 3);
+    const c = World.newChar('Bot', 0, 'wizard', 3);
     c.level = 10;
-    c.specs = autoSpec('runecaller', 10, BUILDS.runecaller[0]);
+    c.specs = autoSpec('wizard', 10, BUILDS.wizard[0]);
     c.x = 606; c.z = 350;
     const p = w.spawnPlayer(c);
     const m = w.makeMob(MOB_BY_ID.brigand, 10, 606, 348);
@@ -72,7 +73,7 @@ describe('combat', () => {
 describe('progression', () => {
   it('levels up, earns points and learns abilities by training a line', () => {
     const w = new World(5, { populate: false, headless: true });
-    const p = w.spawnPlayer(World.newChar('Bot', 2, 'ranger', 5));
+    const p = w.spawnPlayer(World.newChar('Bot', 2, 'hunter', 5));
     expect(p.abilities).toEqual(['aimed_shot', 'crippling_arrow', 'evasion']);
     w.gainXp(100000, '');
     expect(w.char!.level).toBeGreaterThan(5);
@@ -110,7 +111,7 @@ describe('progression', () => {
 
   it('spells and weapons hit harder with a higher line', () => {
     const w = new World(8, { populate: false, headless: true });
-    const c = World.newChar('Bot', 1, 'runecaller', 8);
+    const c = World.newChar('Bot', 0, 'wizard', 8);
     c.level = 15;
     const p = w.spawnPlayer(c);
     const fire = ABILITIES.fire_bolt;
@@ -143,8 +144,9 @@ describe('progression', () => {
     old.version = 1;
     old.level = 14;
     old.hotbar = ['mend', 'smite', 'renew', 'sanctuary', null, null, null, null, null, null];
-    migrateSpecs(old);
+    migrateChar(old);
     expect(old.version).toBe(SAVE_VERSION);
+    expect(old.cls).toBe('cleric');
     expect(old.freeRespec).toBe(true);
     expect(spent(old.specs)).toBeLessThanOrEqual(pointsAt(14));
     expect(old.specs.restoration).toBe(14);
@@ -152,6 +154,27 @@ describe('progression', () => {
     expect(old.hotbar).not.toContain('sanctuary'); // restoration 15
     for (const ab of ['mend', 'smite', 'renew']) expect(old.hotbar).toContain(ab);
   });
+
+  it('heroes from before realm classes become their realm’s class of the same role', () => {
+    const rc = { ...World.newChar('Old', 2, 'wizard', 11), cls: 'runecaller', version: 2, level: 12, specs: { fire: 12, frost: 1, storm: 9 } } as any;
+    rc.hotbar = ['fire_bolt', 'frost_lance', 'root', 'focus', null, null, null, null, null, null];
+    migrateChar(rc);
+    expect(rc.cls).toBe('runecarver');
+    expect(rc.specs).toEqual({ runes: 12, frost: 1, darkness: 9 });
+    expect(rc.freeRespec).toBe(true);
+    expect(rc.hotbar).toContain('frost_lance');
+    expect(rc.hotbar).toContain('rune_bolt');
+    expect(rc.hotbar).not.toContain('fire_bolt');
+    const rg = { ...World.newChar('Old', 1, 'ranger', 12), version: 2, specs: { archery: 1, hunting: 1, survival: 1 } } as any;
+    migrateChar(rg);
+    expect(rg.cls).toBe('ranger');
+    expect(rg.specs).toEqual({ archery: 1, hunting: 1, glamour: 1 });
+    const wd = { ...World.newChar('Old', 0, 'warden', 13), version: 2 } as any;
+    migrateChar(wd);
+    expect(wd.cls).toBe('warden');
+    expect(wd.specs).toEqual({ blades: 1, shields: 1, defence: 1 });
+  });
+
 });
 
 describe('leading a warband', () => {
@@ -178,5 +201,65 @@ describe('leading a warband', () => {
     const alive = b.members.map((id) => w.get(id)!).filter((e) => !e.dead);
     const near = alive.filter((e) => Math.hypot(e.x - p.x, e.z - p.z) < 15);
     expect(near.length).toBeGreaterThan(alive.length / 2);
+  });
+});
+
+describe('realm classes', () => {
+  it('every realm has one class of each role', () => {
+    for (const r of REALM_DEFS) for (const role of ROLES) expect(CLASS_IDS.filter((c) => CLASSES[c].realm === r.id && CLASSES[c].arch === role)).toHaveLength(1);
+  });
+
+  it('every class has three lines whose abilities exist, start at 1 and climb', () => {
+    for (const c of CLASS_IDS) {
+      expect(LINES[c]).toHaveLength(3);
+      expect(BUILDS[c].length).toBeGreaterThan(0);
+      for (const l of LINES[c]) {
+        const lv = l.abilities.map((a) => ABILITIES[a]?.level);
+        expect(lv[0], `${c}/${l.id}`).toBe(1);
+        for (let i = 1; i < lv.length; i++) expect(lv[i], `${c}/${l.id}/${l.abilities[i]}`).toBeGreaterThan(lv[i - 1]);
+      }
+    }
+  });
+
+  it('thorns hurt the attacker, drains heal the caster, dazzles make attacks miss', () => {
+    const w = new World(11, { populate: false, headless: true });
+    const p = w.spawnPlayer(World.newChar('Bot', 1, 'thornguard', 11));
+    const m = w.makeMob(MOB_BY_ID.boar, 1, p.x + 2, p.z);
+    w.add(m);
+    w.addEffect(p, p, { type: 'thorns', dur: 30, value: 0.5 });
+    const before = m.hp;
+    (w as any).thorns(p, m, 10);
+    expect(m.hp).toBe(before - 5);
+    w.addEffect(m, p, { type: 'buff', dur: 10, stat: 'hit', value: -0.3, name: 'Dazzled' });
+    expect(w.buffSum(m, 'hit')).toBeCloseTo(-0.3);
+    const rc = World.newChar('Bot', 2, 'runecarver', 12);
+    rc.level = 10;
+    const q = w.spawnPlayer(rc);
+    q.hp = 10;
+    const foe = w.makeMob(MOB_BY_ID.brigand, 10, q.x + 6, q.z);
+    w.add(foe);
+    (w as any).resolve(q, ABILITIES.drain_life, foe);
+    expect(foe.hp < foe.maxHp || q.hp === 10).toBe(true); // resisted spells do nothing
+    if (foe.hp < foe.maxHp) expect(q.hp).toBeGreaterThan(10);
+  });
+
+  it('a level 8 hero of every class beats a level 6 wolf', () => {
+    for (const c of CLASS_IDS) {
+      const w = new World(20, { populate: false, headless: true });
+      const ch = World.newChar('Bot', CLASSES[c].realm, c, 20);
+      ch.level = 8;
+      ch.specs = autoSpec(c, 8, BUILDS[c][0]);
+      ch.x = -606; ch.z = 350;
+      const p = w.spawnPlayer(ch);
+      const m = w.makeMob(MOB_BY_ID.grey_wolf, 6, -606, 346);
+      w.add(m);
+      p.target = m.id;
+      p.attacking = true;
+      for (let i = 0; i < 20 * 90 && !m.dead && !p.dead; i++) {
+        if (!p.cast) for (const ab of p.abilities) if (w.canUse(p, ab, m) === null && ABILITIES[ab].target === 'enemy') { w.useAbility(p, ab, m.id); break; }
+        w.tick(0.05);
+      }
+      expect(m.dead, c).toBe(true);
+    }
   });
 });
