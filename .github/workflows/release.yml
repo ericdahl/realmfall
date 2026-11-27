@@ -1,0 +1,79 @@
+name: Tag and release
+
+# Cloud sessions can't push tags or create releases, so master does it for them.
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Tag and release the package.json version if it is new
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=$(node -p 'require("./package.json").version')
+          tag="v$version"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "$tag is already released"
+            exit 0
+          fi
+
+          # The release commit: the newest one whose subject starts "Realmfall X.Y.Z: ".
+          # A hash is 40 characters, so the subject starts at column 42.
+          line=$(git log --format='%H %s' HEAD | awk -v p="Realmfall $version: " 'index(substr($0, 42), p) == 1 { print; exit }')
+          release=${line%% *}
+          what=${line#*"Realmfall $version: "}
+          if [ -z "$line" ] || [ -z "$what" ]; then
+            echo "::error::No commit with subject 'Realmfall $version: ...' found"
+            exit 1
+          fi
+          # Tag what shipped: the last commit of the PR that brought the release commit in, so
+          # fixes pushed to that PR after the bump are included. Without a merge, the release commit.
+          target=$release
+          for c in $(git rev-list --first-parent --reverse "$release..HEAD"); do
+            if git merge-base --is-ancestor "$release" "$c"; then
+              if git rev-parse -q --verify "$c^2" >/dev/null && git merge-base --is-ancestor "$release" "$c^2"; then
+                target=$(git rev-parse "$c^2")
+              fi
+              break
+            fi
+          done
+          what="$(echo "${what:0:1}" | tr '[:lower:]' '[:upper:]')${what:1}"
+
+          node --experimental-strip-types -e '
+            import("./src/changelog.ts").then(({ CHANGELOG }) => {
+              const e = CHANGELOG.find((c) => c.version === process.argv[1]);
+              if (!e) throw new Error(`no changelog entry for ${process.argv[1]}`);
+              const notes = e.notes.map((n) => `- ${n}`).join("\n");
+              require("fs").writeFileSync("notes.md", `${notes}\n\n_Released ${e.date}._\n`);
+            });
+          ' "$version"
+
+          # A run that tagged but failed to release only needs the release on a re-run.
+          if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
+            echo "$tag exists; creating its release"
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898289+github-actions[bot]@users.noreply.github.com"
+            git tag -a "$tag" "$target" -m "Realmfall $version: $what"
+            git push origin "$tag"
+          fi
+          gh release create "$tag" --verify-tag --title "$version: $what" --notes-file notes.md
