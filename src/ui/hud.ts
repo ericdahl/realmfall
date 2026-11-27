@@ -395,7 +395,7 @@ export class Hud {
       $(pw, 'span').textContent = `${Math.floor(e.power)} / ${e.maxPower}`;
       const en = $(el, '.en');
       ($(en, 'i')).style.width = `${e.endu}%`;
-      $(en, 'span').textContent = `Endurance ${Math.floor(e.endu)}%`;
+      $(en, 'span').textContent = `${Math.floor(e.endu)}%`;
     }
     const buffs = $(el, '.buffs');
     const parts = e.effects.map((f) => {

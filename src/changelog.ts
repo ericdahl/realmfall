@@ -7,6 +7,12 @@ export interface Release { version: string; date: string; title: string; notes: 
 
 export const CHANGELOG: Release[] = [
   {
+    version: '0.3.1',
+    date: '2026-11-27',
+    title: 'A tidier endurance bar',
+    notes: ['The endurance bar shows just the percentage, without the word Endurance.'],
+  },
+  {
     version: '0.3.0',
     date: '2026-11-27',
     title: 'Specialization lines',
