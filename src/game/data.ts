@@ -38,7 +38,6 @@ export interface ClassDef {
   evade: number;
   /** multiplier on melee swings */
   melee: number;
-  abilities: string[];
 }
 
 export const CLASSES: Record<ClassId, ClassDef> = {
@@ -48,7 +47,6 @@ export const CLASSES: Record<ClassId, ClassDef> = {
     hpPerLevel: 21, powerStat: null,
     base: { str: 60, con: 55, dex: 45, int: 30, pie: 35 }, growth: { str: 2.5, con: 2, dex: 1, int: 0, pie: 0.5 },
     weapon: 'sword', armor: 'plate', parry: 0.09, block: 0.14, evade: 0.03, melee: 1.25,
-    abilities: ['slash', 'shield_bash', 'riposte', 'backhand', 'rally', 'flank_cut', 'executioner', 'taunt'],
   },
   ranger: {
     id: 'ranger', name: 'Ranger', role: 'Bow',
@@ -56,7 +54,6 @@ export const CLASSES: Record<ClassId, ClassDef> = {
     hpPerLevel: 15, powerStat: null,
     base: { str: 45, con: 45, dex: 60, int: 30, pie: 35 }, growth: { str: 1, con: 1.5, dex: 2.5, int: 0, pie: 0.5 },
     weapon: 'bow', armor: 'leather', parry: 0.04, block: 0, evade: 0.12, melee: 0.5,
-    abilities: ['aimed_shot', 'crippling_arrow', 'quick_shot', 'evasion', 'critical_shot', 'volley'],
   },
   runecaller: {
     id: 'runecaller', name: 'Runecaller', role: 'Fire, frost and lightning',
@@ -64,7 +61,6 @@ export const CLASSES: Record<ClassId, ClassDef> = {
     hpPerLevel: 11, powerStat: 'int',
     base: { str: 30, con: 40, dex: 50, int: 65, pie: 35 }, growth: { str: 0, con: 1, dex: 1, int: 3, pie: 0 },
     weapon: 'staff', armor: 'cloth', parry: 0, block: 0, evade: 0.04, melee: 0.55,
-    abilities: ['fire_bolt', 'frost_lance', 'root', 'focus', 'arcane_shield', 'flame_ring', 'lightning', 'meteor'],
   },
   cleric: {
     id: 'cleric', name: 'Cleric', role: 'Healing and holy wrath',
@@ -72,19 +68,23 @@ export const CLASSES: Record<ClassId, ClassDef> = {
     hpPerLevel: 16, powerStat: 'pie',
     base: { str: 45, con: 50, dex: 40, int: 30, pie: 65 }, growth: { str: 1, con: 1.5, dex: 0.5, int: 0, pie: 2.5 },
     weapon: 'mace', armor: 'chain', parry: 0.03, block: 0.1, evade: 0.03, melee: 1.15,
-    abilities: ['smite', 'mend', 'renew', 'focus', 'blessing', 'holy_stun', 'greater_mend', 'sanctuary'],
   },
 };
 export const CLASS_IDS: ClassId[] = ['warden', 'ranger', 'runecaller', 'cleric'];
+
+/** endu: extra endurance regained per second */
+export type BuffStat = 'dmg' | 'armor' | 'evade' | 'speed' | 'endu';
 
 export type EffectDef =
   | { type: 'stun'; dur: number }
   | { type: 'root'; dur: number }
   | { type: 'snare'; dur: number; value: number }
   | { type: 'dot'; dur: number; value: number } // fraction of the hit, per second
-  | { type: 'hot'; dur: number; value: number } // heal coefficient per tick
-  | { type: 'buff'; dur: number; stat: 'dmg' | 'armor' | 'evade' | 'speed'; value: number; name: string }
-  | { type: 'absorb'; dur: number; value: number }
+  | { type: 'hot'; dur: number; value: number; name?: string } // heal coefficient per tick
+  | { type: 'buff'; dur: number; stat: BuffStat; value: number; name: string }
+  | { type: 'absorb'; dur: number; value: number; name?: string }
+  | { type: 'restore'; dur: 0; value: number } // endurance, at once
+  | { type: 'freedom'; dur: number } // clears and wards off snares and roots
   | { type: 'focus'; dur: number }
   | { type: 'taunt'; dur: number };
 
@@ -93,6 +93,7 @@ export interface AbilityDef {
   name: string;
   icon: string;
   desc: string;
+  /** the level its specialization line must reach */
   level: number;
   /** style: modifies the next swing. shot/spell: cast or drawn. instant: happens at once. */
   kind: 'style' | 'shot' | 'spell' | 'instant';
@@ -111,6 +112,8 @@ export interface AbilityDef {
   heal?: boolean;
   req?: { pos?: 'behind' | 'side'; after?: 'parry' | 'block' | 'evade'; follow?: string; shield?: boolean };
   effects?: EffectDef[];
+  /** weapon damage that ignores armour */
+  pierce?: boolean;
   /** spell can be cast while moving (instants always can) */
   noInterrupt?: boolean;
 }
@@ -118,40 +121,58 @@ export interface AbilityDef {
 export const ABILITIES: Record<string, AbilityDef> = {
   // Warden
   slash: { id: 'slash', name: 'Slash', icon: 'sword', desc: 'A heavy cut. Opens Backhand.', level: 1, kind: 'style', costType: 'endu', cost: 5, target: 'enemy', school: 'melee', bonus: 0.45 },
-  shield_bash: { id: 'shield_bash', name: 'Shield Bash', icon: 'shield', desc: 'Stuns the target for 3 seconds and interrupts any spell.', level: 2, kind: 'instant', costType: 'endu', cost: 8, cd: 20, range: 4, target: 'enemy', school: 'melee', bonus: -0.5, effects: [{ type: 'stun', dur: 3 }] },
-  riposte: { id: 'riposte', name: 'Riposte', icon: 'riposte', desc: 'After you parry: a fast counter for heavy damage.', level: 4, kind: 'style', costType: 'endu', cost: 4, target: 'enemy', school: 'melee', bonus: 1.3, req: { after: 'parry' } },
-  backhand: { id: 'backhand', name: 'Backhand', icon: 'chain', desc: 'Follows Slash. Hits hard and slows the target by 35% for 8 seconds. Opens Executioner.', level: 6, kind: 'style', costType: 'endu', cost: 6, target: 'enemy', school: 'melee', bonus: 0.95, req: { follow: 'slash' }, effects: [{ type: 'snare', dur: 8, value: 0.35 }] },
-  rally: { id: 'rally', name: 'Rally', icon: 'banner', desc: '+25% armour for 30 seconds.', level: 9, kind: 'instant', costType: 'endu', cost: 10, cd: 60, target: 'self', school: 'melee', effects: [{ type: 'buff', dur: 30, stat: 'armor', value: 0.25, name: 'Rally' }] },
-  flank_cut: { id: 'flank_cut', name: 'Flank Cut', icon: 'flank', desc: 'From the side or behind: a deep cut that bleeds for 10 seconds.', level: 12, kind: 'style', costType: 'endu', cost: 7, target: 'enemy', school: 'melee', bonus: 1.4, req: { pos: 'side' }, effects: [{ type: 'dot', dur: 10, value: 0.06 }] },
-  executioner: { id: 'executioner', name: 'Executioner', icon: 'axe', desc: 'Follows Backhand. A brutal finishing blow.', level: 15, kind: 'style', costType: 'endu', cost: 8, target: 'enemy', school: 'melee', bonus: 2.2, req: { follow: 'backhand' } },
-  taunt: { id: 'taunt', name: 'Challenge', icon: 'horn', desc: 'Forces nearby monsters and soldiers to attack you for 6 seconds.', level: 18, kind: 'instant', costType: 'endu', cost: 6, cd: 20, target: 'pbaoe', radius: 12, school: 'melee', effects: [{ type: 'taunt', dur: 6 }] },
+  shield_bash: { id: 'shield_bash', name: 'Shield Bash', icon: 'shield', desc: 'Stuns the target for 3 seconds and interrupts any spell.', level: 1, kind: 'instant', costType: 'endu', cost: 8, cd: 20, range: 4, target: 'enemy', school: 'melee', bonus: -0.5, effects: [{ type: 'stun', dur: 3 }] },
+  riposte: { id: 'riposte', name: 'Riposte', icon: 'riposte', desc: 'After you parry: a fast counter for heavy damage.', level: 1, kind: 'style', costType: 'endu', cost: 4, target: 'enemy', school: 'melee', bonus: 1.3, req: { after: 'parry' } },
+  backhand: { id: 'backhand', name: 'Backhand', icon: 'chain', desc: 'Follows Slash. Hits hard and slows the target by 35% for 8 seconds. Opens Executioner.', level: 4, kind: 'style', costType: 'endu', cost: 6, target: 'enemy', school: 'melee', bonus: 0.95, req: { follow: 'slash' }, effects: [{ type: 'snare', dur: 8, value: 0.35 }] },
+  rally: { id: 'rally', name: 'Rally', icon: 'banner', desc: '+25% armour for 30 seconds.', level: 5, kind: 'instant', costType: 'endu', cost: 10, cd: 60, target: 'self', school: 'melee', effects: [{ type: 'buff', dur: 30, stat: 'armor', value: 0.25, name: 'Rally' }] },
+  flank_cut: { id: 'flank_cut', name: 'Flank Cut', icon: 'flank', desc: 'From the side or behind: a deep cut that bleeds for 10 seconds.', level: 8, kind: 'style', costType: 'endu', cost: 7, target: 'enemy', school: 'melee', bonus: 1.4, req: { pos: 'side' }, effects: [{ type: 'dot', dur: 10, value: 0.06 }] },
+  executioner: { id: 'executioner', name: 'Executioner', icon: 'axe', desc: 'Follows Backhand. A brutal finishing blow.', level: 12, kind: 'style', costType: 'endu', cost: 8, target: 'enemy', school: 'melee', bonus: 2.2, req: { follow: 'backhand' } },
+  sweeping_blow: { id: 'sweeping_blow', name: 'Sweeping Blow', icon: 'sweep', desc: 'A wide swing that hits every enemy within 5 metres.', level: 16, kind: 'instant', costType: 'endu', cost: 12, cd: 20, radius: 5, target: 'pbaoe', school: 'melee', bonus: 0.3 },
+  shield_slam: { id: 'shield_slam', name: 'Shield Slam', icon: 'slam', desc: 'After you block: slams the target with your shield, stunning it for 2 seconds.', level: 9, kind: 'style', costType: 'endu', cost: 6, target: 'enemy', school: 'melee', bonus: 0.6, req: { after: 'block' }, effects: [{ type: 'stun', dur: 2 }] },
+  bulwark: { id: 'bulwark', name: 'Bulwark', icon: 'bulwark', desc: '+50% armour for 20 seconds, but you move 30% slower.', level: 14, kind: 'instant', costType: 'endu', cost: 10, cd: 90, target: 'self', school: 'melee', effects: [{ type: 'buff', dur: 20, stat: 'armor', value: 0.5, name: 'Bulwark' }, { type: 'buff', dur: 20, stat: 'speed', value: -0.3, name: 'Bulwark (slowed)' }] },
+  second_wind: { id: 'second_wind', name: 'Second Wind', icon: 'lungs', desc: 'Restores half your endurance at once.', level: 10, kind: 'instant', costType: 'endu', cost: 0, cd: 120, target: 'self', school: 'melee', effects: [{ type: 'restore', dur: 0, value: 50 }] },
+  stand_fast: { id: 'stand_fast', name: 'Stand Fast', icon: 'anchor', desc: 'Breaks snares and roots, and none can hold you for 10 seconds.', level: 15, kind: 'instant', costType: 'endu', cost: 8, cd: 60, target: 'self', school: 'melee', effects: [{ type: 'freedom', dur: 10 }] },
+  taunt: { id: 'taunt', name: 'Challenge', icon: 'horn', desc: 'Forces nearby monsters and soldiers to attack you for 6 seconds.', level: 5, kind: 'instant', costType: 'endu', cost: 6, cd: 20, target: 'pbaoe', radius: 12, school: 'melee', effects: [{ type: 'taunt', dur: 6 }] },
 
   // Ranger
   aimed_shot: { id: 'aimed_shot', name: 'Aimed Shot', icon: 'arrow', desc: 'A long draw for double damage.', level: 1, kind: 'shot', costType: 'endu', cost: 5, cast: 2.6, range: 40, target: 'enemy', school: 'ranged', bonus: 1.0 },
-  crippling_arrow: { id: 'crippling_arrow', name: 'Crippling Arrow', icon: 'snarearrow', desc: 'A quick draw that slows the target by 45% for 10 seconds.', level: 3, kind: 'shot', costType: 'endu', cost: 6, cast: 1.5, range: 40, target: 'enemy', school: 'ranged', bonus: 0.1, effects: [{ type: 'snare', dur: 10, value: 0.45 }] },
-  quick_shot: { id: 'quick_shot', name: 'Snap Shot', icon: 'quick', desc: 'An instant shot. Usable in melee.', level: 5, kind: 'instant', costType: 'endu', cost: 7, cd: 8, range: 40, target: 'enemy', school: 'ranged', bonus: 0.2 },
-  evasion: { id: 'evasion', name: 'Evasion', icon: 'wind', desc: '+25% chance to evade for 15 seconds.', level: 8, kind: 'instant', costType: 'endu', cost: 8, cd: 60, target: 'self', school: 'ranged', effects: [{ type: 'buff', dur: 15, stat: 'evade', value: 0.25, name: 'Evasion' }] },
-  critical_shot: { id: 'critical_shot', name: 'Heart-Seeker', icon: 'crit', desc: 'A four-second draw for four times the damage. Patience.', level: 11, kind: 'shot', costType: 'endu', cost: 10, cast: 4, cd: 12, range: 45, target: 'enemy', school: 'ranged', bonus: 3.0 },
-  volley: { id: 'volley', name: 'Volley', icon: 'volley', desc: 'Rains arrows on everything within 8 metres of the target.', level: 15, kind: 'shot', costType: 'endu', cost: 12, cast: 2, cd: 25, range: 40, radius: 8, target: 'enemyAoe', school: 'ranged', bonus: 0.6 },
+  crippling_arrow: { id: 'crippling_arrow', name: 'Crippling Arrow', icon: 'snarearrow', desc: 'A quick draw that slows the target by 45% for 10 seconds.', level: 1, kind: 'shot', costType: 'endu', cost: 6, cast: 1.5, range: 40, target: 'enemy', school: 'ranged', bonus: 0.1, effects: [{ type: 'snare', dur: 10, value: 0.45 }] },
+  quick_shot: { id: 'quick_shot', name: 'Snap Shot', icon: 'quick', desc: 'An instant shot. Usable in melee.', level: 4, kind: 'instant', costType: 'endu', cost: 7, cd: 8, range: 40, target: 'enemy', school: 'ranged', bonus: 0.2 },
+  evasion: { id: 'evasion', name: 'Evasion', icon: 'wind', desc: '+25% chance to evade for 15 seconds.', level: 1, kind: 'instant', costType: 'endu', cost: 8, cd: 60, target: 'self', school: 'ranged', effects: [{ type: 'buff', dur: 15, stat: 'evade', value: 0.25, name: 'Evasion' }] },
+  critical_shot: { id: 'critical_shot', name: 'Heart-Seeker', icon: 'crit', desc: 'A four-second draw for four times the damage. Patience.', level: 7, kind: 'shot', costType: 'endu', cost: 10, cast: 4, cd: 12, range: 45, target: 'enemy', school: 'ranged', bonus: 3.0 },
+  volley: { id: 'volley', name: 'Volley', icon: 'volley', desc: 'Rains arrows on everything within 8 metres of the target.', level: 12, kind: 'shot', costType: 'endu', cost: 12, cast: 2, cd: 25, range: 40, radius: 8, target: 'enemyAoe', school: 'ranged', bonus: 0.6 },
+  piercing_shot: { id: 'piercing_shot', name: 'Piercing Shot', icon: 'pierce', desc: 'A heavy arrow that goes straight through armour.', level: 17, kind: 'shot', costType: 'endu', cost: 10, cast: 2.4, cd: 15, range: 40, target: 'enemy', school: 'ranged', bonus: 1.4, pierce: true },
+  pinning_shot: { id: 'pinning_shot', name: 'Pinning Shot', icon: 'pin', desc: 'Pins the target to the ground for 8 seconds. Damage frees it after the first two.', level: 9, kind: 'shot', costType: 'endu', cost: 8, cast: 1.8, cd: 20, range: 40, target: 'enemy', school: 'ranged', bonus: -0.5, effects: [{ type: 'root', dur: 8 }] },
+  barbed_arrow: { id: 'barbed_arrow', name: 'Barbed Arrow', icon: 'barb', desc: 'An arrow that makes the target bleed for 12 seconds.', level: 14, kind: 'shot', costType: 'endu', cost: 8, cast: 2, range: 40, target: 'enemy', school: 'ranged', bonus: 0.4, effects: [{ type: 'dot', dur: 12, value: 0.08 }] },
+  fleet_foot: { id: 'fleet_foot', name: 'Fleet Foot', icon: 'boot', desc: 'Run 40% faster for 8 seconds.', level: 6, kind: 'instant', costType: 'endu', cost: 10, cd: 45, target: 'self', school: 'ranged', effects: [{ type: 'buff', dur: 8, stat: 'speed', value: 0.4, name: 'Fleet Foot' }] },
+  field_dressing: { id: 'field_dressing', name: 'Field Dressing', icon: 'bandage', desc: 'Binds your wounds (or a friend’s), healing over 12 seconds.', level: 16, kind: 'instant', costType: 'endu', cost: 10, cd: 60, range: 6, target: 'ally', school: 'ranged', power: [4, 1.6], heal: true, effects: [{ type: 'hot', dur: 12, value: 1, name: 'Field Dressing' }] },
 
   // Runecaller
   fire_bolt: { id: 'fire_bolt', name: 'Fire Bolt', icon: 'fire', desc: 'Hurls fire at the target.', level: 1, kind: 'spell', costType: 'power', cost: 7, cast: 2.5, range: 34, target: 'enemy', school: 'fire', power: [9, 5.6] },
-  frost_lance: { id: 'frost_lance', name: 'Frost Lance', icon: 'frost', desc: 'Cold damage that slows the target by 50% for 10 seconds.', level: 2, kind: 'spell', costType: 'power', cost: 7, cast: 2.1, range: 34, target: 'enemy', school: 'cold', power: [6, 3.6], effects: [{ type: 'snare', dur: 10, value: 0.5 }] },
-  root: { id: 'root', name: 'Earthbind', icon: 'root', desc: 'Roots the target in place for 15 seconds. Damage frees it after the first two.', level: 4, kind: 'spell', costType: 'power', cost: 8, cast: 1.6, cd: 12, range: 32, target: 'enemy', school: 'energy', effects: [{ type: 'root', dur: 15 }] },
-  focus: { id: 'focus', name: 'Focus', icon: 'eye', desc: 'Your next spell cannot be interrupted.', level: 5, kind: 'instant', costType: 'power', cost: 3, cd: 30, target: 'self', school: 'energy', effects: [{ type: 'focus', dur: 20 }] },
-  arcane_shield: { id: 'arcane_shield', name: 'Rune Ward', icon: 'ward', desc: 'Absorbs damage equal to a third of your life for 20 seconds.', level: 7, kind: 'instant', costType: 'power', cost: 12, cd: 45, target: 'self', school: 'energy', effects: [{ type: 'absorb', dur: 20, value: 0.33 }] },
-  flame_ring: { id: 'flame_ring', name: 'Flame Ring', icon: 'ring', desc: 'Instant fire around you (8 m).', level: 10, kind: 'instant', costType: 'power', cost: 10, cd: 15, radius: 8, target: 'pbaoe', school: 'fire', power: [8, 4] },
-  lightning: { id: 'lightning', name: 'Thunderclap', icon: 'bolt', desc: 'A slow cast that strikes very hard.', level: 13, kind: 'spell', costType: 'power', cost: 11, cast: 3.2, range: 36, target: 'enemy', school: 'energy', power: [16, 10] },
-  meteor: { id: 'meteor', name: 'Starfall', icon: 'meteor', desc: 'Fire from the sky on everything within 9 m of the target.', level: 17, kind: 'spell', costType: 'power', cost: 16, cast: 3.5, cd: 30, range: 36, radius: 9, target: 'enemyAoe', school: 'fire', power: [14, 7.5] },
+  frost_lance: { id: 'frost_lance', name: 'Frost Lance', icon: 'frost', desc: 'Cold damage that slows the target by 50% for 10 seconds.', level: 1, kind: 'spell', costType: 'power', cost: 7, cast: 2.1, range: 34, target: 'enemy', school: 'cold', power: [6, 3.6], effects: [{ type: 'snare', dur: 10, value: 0.5 }] },
+  root: { id: 'root', name: 'Earthbind', icon: 'root', desc: 'Roots the target in place for 15 seconds. Damage frees it after the first two.', level: 1, kind: 'spell', costType: 'power', cost: 8, cast: 1.6, cd: 12, range: 32, target: 'enemy', school: 'energy', effects: [{ type: 'root', dur: 15 }] },
+  focus: { id: 'focus', name: 'Focus', icon: 'eye', desc: 'Your next spell cannot be interrupted.', level: 4, kind: 'instant', costType: 'power', cost: 3, cd: 30, target: 'self', school: 'energy', effects: [{ type: 'focus', dur: 20 }] },
+  arcane_shield: { id: 'arcane_shield', name: 'Rune Ward', icon: 'ward', desc: 'Absorbs damage equal to a third of your life for 20 seconds.', level: 8, kind: 'instant', costType: 'power', cost: 12, cd: 45, target: 'self', school: 'energy', effects: [{ type: 'absorb', dur: 20, value: 0.33 }] },
+  flame_ring: { id: 'flame_ring', name: 'Flame Ring', icon: 'ring', desc: 'Instant fire around you (8 m).', level: 6, kind: 'instant', costType: 'power', cost: 10, cd: 15, radius: 8, target: 'pbaoe', school: 'fire', power: [8, 4] },
+  lightning: { id: 'lightning', name: 'Thunderclap', icon: 'bolt', desc: 'A slow cast that strikes very hard.', level: 12, kind: 'spell', costType: 'power', cost: 11, cast: 3.2, range: 36, target: 'enemy', school: 'energy', power: [16, 10] },
+  meteor: { id: 'meteor', name: 'Starfall', icon: 'meteor', desc: 'Fire from the sky on everything within 9 m of the target.', level: 15, kind: 'spell', costType: 'power', cost: 16, cast: 3.5, cd: 30, range: 36, radius: 9, target: 'enemyAoe', school: 'fire', power: [14, 7.5] },
+  immolate: { id: 'immolate', name: 'Immolate', icon: 'burn', desc: 'Sets the target alight: a small hit, then it burns for 12 seconds.', level: 10, kind: 'spell', costType: 'power', cost: 8, cast: 2, range: 34, target: 'enemy', school: 'fire', power: [4, 2.2], effects: [{ type: 'dot', dur: 12, value: 0.12 }] },
+  ice_shard: { id: 'ice_shard', name: 'Ice Shard', icon: 'shard', desc: 'A quick, cheap bolt of ice.', level: 5, kind: 'spell', costType: 'power', cost: 5, cast: 1.4, range: 34, target: 'enemy', school: 'cold', power: [5, 3.2] },
+  frost_nova: { id: 'frost_nova', name: 'Frost Nova', icon: 'nova', desc: 'Instant cold around you (7 m) that roots everything it hits for 6 seconds.', level: 10, kind: 'instant', costType: 'power', cost: 10, cd: 25, radius: 7, target: 'pbaoe', school: 'cold', power: [3, 1.5], effects: [{ type: 'root', dur: 6 }] },
+  hailstorm: { id: 'hailstorm', name: 'Hailstorm', icon: 'hail', desc: 'Hail on everything within 9 m of the target, slowing it by 40% for 8 seconds.', level: 15, kind: 'spell', costType: 'power', cost: 15, cast: 3, cd: 30, range: 36, radius: 9, target: 'enemyAoe', school: 'cold', power: [10, 5.5], effects: [{ type: 'snare', dur: 8, value: 0.4 }] },
 
   // Cleric
   smite: { id: 'smite', name: 'Smite', icon: 'sun', desc: 'Holy damage at range.', level: 1, kind: 'spell', costType: 'power', cost: 6, cast: 2.2, range: 32, target: 'enemy', school: 'holy', power: [7, 4.6] },
   mend: { id: 'mend', name: 'Mend', icon: 'heart', desc: 'Heals you or your target.', level: 1, kind: 'spell', costType: 'power', cost: 8, cast: 2.5, range: 30, target: 'ally', school: 'holy', power: [14, 8], heal: true },
-  renew: { id: 'renew', name: 'Renew', icon: 'renew', desc: 'Heals over 12 seconds. Instant.', level: 3, kind: 'instant', costType: 'power', cost: 7, cd: 10, range: 30, target: 'ally', school: 'holy', power: [3, 1.4], heal: true, effects: [{ type: 'hot', dur: 12, value: 1 }] },
-  blessing: { id: 'blessing', name: 'Blessing of Arms', icon: 'bless', desc: '+15% damage for you and realm-mates within 20 m, for 10 minutes.', level: 6, kind: 'instant', costType: 'power', cost: 10, cd: 10, radius: 20, target: 'pbaoeAlly', school: 'holy', effects: [{ type: 'buff', dur: 600, stat: 'dmg', value: 0.15, name: 'Blessing of Arms' }] },
-  holy_stun: { id: 'holy_stun', name: 'Rebuke', icon: 'stun', desc: 'Stuns the target for 4 seconds.', level: 9, kind: 'instant', costType: 'power', cost: 8, cd: 30, range: 20, target: 'enemy', school: 'holy', effects: [{ type: 'stun', dur: 4 }] },
-  greater_mend: { id: 'greater_mend', name: 'Greater Mend', icon: 'bigheart', desc: 'A slower, much larger heal.', level: 12, kind: 'spell', costType: 'power', cost: 14, cast: 3.2, range: 30, target: 'ally', school: 'holy', power: [30, 17], heal: true },
-  sanctuary: { id: 'sanctuary', name: 'Sanctuary', icon: 'sanct', desc: 'Heals you and every realm-mate within 15 m.', level: 16, kind: 'instant', costType: 'power', cost: 18, cd: 30, radius: 15, target: 'pbaoeAlly', school: 'holy', power: [18, 9], heal: true },
+  renew: { id: 'renew', name: 'Renew', icon: 'renew', desc: 'Heals over 12 seconds. Instant.', level: 4, kind: 'instant', costType: 'power', cost: 7, cd: 10, range: 30, target: 'ally', school: 'holy', power: [3, 1.4], heal: true, effects: [{ type: 'hot', dur: 12, value: 1 }] },
+  blessing: { id: 'blessing', name: 'Blessing of Arms', icon: 'bless', desc: '+15% damage for you and realm-mates within 20 m, for 10 minutes.', level: 1, kind: 'instant', costType: 'power', cost: 10, cd: 10, radius: 20, target: 'pbaoeAlly', school: 'holy', effects: [{ type: 'buff', dur: 600, stat: 'dmg', value: 0.15, name: 'Blessing of Arms' }] },
+  holy_stun: { id: 'holy_stun', name: 'Rebuke', icon: 'stun', desc: 'Stuns the target for 4 seconds.', level: 8, kind: 'instant', costType: 'power', cost: 8, cd: 30, range: 20, target: 'enemy', school: 'holy', effects: [{ type: 'stun', dur: 4 }] },
+  greater_mend: { id: 'greater_mend', name: 'Greater Mend', icon: 'bigheart', desc: 'A slower, much larger heal.', level: 9, kind: 'spell', costType: 'power', cost: 14, cast: 3.2, range: 30, target: 'ally', school: 'holy', power: [30, 17], heal: true },
+  sanctuary: { id: 'sanctuary', name: 'Sanctuary', icon: 'sanct', desc: 'Heals you and every realm-mate within 15 m.', level: 15, kind: 'instant', costType: 'power', cost: 18, cd: 30, radius: 15, target: 'pbaoeAlly', school: 'holy', power: [18, 9], heal: true },
+  holy_fire: { id: 'holy_fire', name: 'Holy Fire', icon: 'holyfire', desc: 'Holy flame that keeps burning the target for 12 seconds.', level: 13, kind: 'spell', costType: 'power', cost: 9, cast: 2.4, range: 32, target: 'enemy', school: 'holy', power: [6, 3], effects: [{ type: 'dot', dur: 12, value: 0.1 }] },
+  ward_of_faith: { id: 'ward_of_faith', name: 'Ward of Faith', icon: 'wardfaith', desc: '+20% armour for you and realm-mates within 20 m, for 10 minutes.', level: 6, kind: 'instant', costType: 'power', cost: 10, cd: 10, radius: 20, target: 'pbaoeAlly', school: 'holy', effects: [{ type: 'buff', dur: 600, stat: 'armor', value: 0.2, name: 'Ward of Faith' }] },
+  resolve: { id: 'resolve', name: 'Resolve', icon: 'resolve', desc: 'You and realm-mates within 20 m regain endurance twice as fast, for 10 minutes.', level: 11, kind: 'instant', costType: 'power', cost: 10, cd: 10, radius: 20, target: 'pbaoeAlly', school: 'holy', effects: [{ type: 'buff', dur: 600, stat: 'endu', value: 3.5, name: 'Resolve' }] },
+  shield_of_faith: { id: 'shield_of_faith', name: 'Shield of Faith', icon: 'faithshield', desc: 'Wraps you or a friend in light that absorbs damage equal to a quarter of their life, for 20 seconds.', level: 16, kind: 'instant', costType: 'power', cost: 12, cd: 30, range: 30, target: 'ally', school: 'holy', effects: [{ type: 'absorb', dur: 20, value: 0.25, name: 'Shield of Faith' }] },
 
   // Monster abilities
   bog_bolt: { id: 'bog_bolt', name: 'bog bolt', icon: 'frost', desc: '', level: 1, kind: 'spell', costType: 'power', cost: 0, cast: 2.4, range: 28, target: 'enemy', school: 'cold', power: [5, 3.2], effects: [{ type: 'snare', dur: 5, value: 0.3 }] },

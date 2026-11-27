@@ -7,6 +7,19 @@ export interface Release { version: string; date: string; title: string; notes: 
 
 export const CHANGELOG: Release[] = [
   {
+    version: '0.3.0',
+    date: '2026-11-27',
+    title: 'Specialization lines',
+    notes: [
+      'Every class now has three specialization lines. Warden: Blades, Shields and Defence. Ranger: Archery, Hunting and Survival. Runecaller: Fire, Frost and Storm. Cleric: Restoration, Smiting and Enhancement.',
+      'Each level gives you specialization points (one and a half times the level). Spend them in the Abilities window (K): raising a line from n to n+1 costs n+1 points, and no line can go above your level. The Abilities button glows when you have points to spend.',
+      'A line unlocks its abilities as it rises and makes them stronger: spells and heals are as strong as their line, Blades and Archery raise weapon damage, and Shields, Defence and Survival raise block, parry and evade. You can’t max everything, so choose.',
+      'Eighteen new abilities, among them Sweeping Blow, Shield Slam, Bulwark, Stand Fast, Pinning Shot, Barbed Arrow, Piercing Shot, Field Dressing, Immolate, Ice Shard, Frost Nova, Hailstorm, Holy Fire, Ward of Faith and Shield of Faith.',
+      'Respec from the Abilities window: free up to level 5, then it costs copper. Heroes made before this version start with their class’s usual build and one free respec.',
+      'Soldiers, guards and other heroes have builds of their own, so two Runecallers in a warband may fight quite differently.',
+    ],
+  },
+  {
     version: '0.2.1',
     date: '2026-11-27',
     title: 'A green endurance bar',

@@ -12,6 +12,7 @@ import { iconUrl } from './icons';
 import { abilityTip, type Hud } from './hud';
 import { sfx } from './audio';
 import { showNotes } from './title';
+import { LINES, freePoints, respecCost } from '../game/specs';
 
 export type PanelId = 'char' | 'bag' | 'abilities' | 'map' | 'dialog' | 'help' | 'menu';
 
@@ -66,6 +67,7 @@ export class Panels {
 
   close(id: PanelId) {
     this.open.delete(id);
+    if (id === 'abilities') this.respecArmed = false;
     const el = this.els.get(id);
     if (el) el.style.display = 'none';
     if (id === 'dialog') this.dialogWith = null;
@@ -85,6 +87,7 @@ export class Panels {
     if (this.tick < 0.5) return;
     this.tick = 0;
     for (const id of this.open) if (id === 'char' || id === 'map') this.refresh(id);
+    if (this.open.has('abilities') && this.w.char && this.w.char.level !== this.shownLevel) this.refresh('abilities');
     if (this.dialogWith && this.w.player && dist(this.w.player, 'site' in this.dialogWith ? this.dialogWith.site : this.dialogWith) > 12) this.close('dialog');
   }
 
@@ -195,25 +198,57 @@ export class Panels {
 
   // ---------- abilities ----------
 
+  private respecArmed = false;
+  private shownLevel = 0;
+
   private abilityPanel() {
-    const w = this.w, ch = w.char!;
+    const w = this.w, ch = w.char!, p = w.player!;
     const el = this.panel('abilities', 'Abilities', 'left');
+    const body = el.querySelector('.body') as HTMLElement;
+    const scroll = body.scrollTop;
+    this.shownLevel = ch.level;
     const cls = CLASSES[ch.cls];
-    const list = cls.abilities.map((id) => {
-      const ab = ABILITIES[id];
-      const known = ab.level <= ch.level;
-      return `<div class="abil ${known ? '' : 'locked'}" draggable="${known}" data-ab="${id}"><img src="${iconUrl(ab.icon, ab.school)}" alt=""><div><b>${ab.name}</b> <small>level ${ab.level}</small><br><small>${ab.desc}</small></div></div>`;
+    const free = freePoints(ch.level, ch.specs);
+    const cost = ch.freeRespec ? 0 : respecCost(ch.level);
+    const lines = LINES[ch.cls].map((l) => {
+      const lv = ch.specs[l.id] ?? 1;
+      const next = lv + 1;
+      const can = lv < ch.level && free >= next;
+      const why = lv >= ch.level ? 'Lines can\u2019t go above your level' : free < next ? `Needs ${next} points` : `Spend ${next} points to reach ${next}`;
+      const abil = l.abilities.map((id) => {
+        const ab = ABILITIES[id];
+        const known = p.abilities.includes(id);
+        return `<div class="abil ${known ? '' : 'locked'}" draggable="${known}" data-ab="${id}"><img src="${iconUrl(ab.icon, ab.school)}" alt=""><div><b>${ab.name}</b> <small>${l.name} ${ab.level}</small><br><small>${ab.desc}</small></div></div>`;
+      }).join('');
+      return `<div class="line"><div class="lhead"><b>${l.name}</b><span class="lv">${lv}</span><button class="train" data-line="${l.id}" ${can ? '' : 'disabled'} title="${why}">+ ${next} pts</button></div><p class="muted ldesc">${l.desc}</p>${abil}</div>`;
     }).join('');
-    el.querySelector('.body')!.innerHTML = `<p class="muted">${cls.desc}</p><p class="muted">Drag an ability onto the hotbar. Right-click a hotbar slot to clear it.</p>${list}
+    const respecLabel = this.respecArmed ? 'Click again to respec' : `Respec${cost ? ` (${moneyText(cost)})` : ' (free)'}`;
+    body.innerHTML = `<p class="muted">${cls.desc}</p>
+      <div class="specbar"><span>Points to spend: <b class="${free ? 'pts' : ''}">${free}</b></span><button class="respec ${this.respecArmed ? 'armed' : ''}">${respecLabel}</button></div>
+      <p class="muted">Raising a line from n to n+1 costs n+1 points. A line unlocks its abilities and makes them stronger, and can't go above your level. Drag an ability onto the hotbar; right-click a hotbar slot to clear it.</p>${lines}
       <h4>Everyone</h4><p class="muted"><b>X</b> sprint on/off, or hold <b>Shift</b> (uses endurance) · <b>Z</b> toggle attack · <b>G</b>/<b>V</b> potions</p>`;
+    body.scrollTop = scroll;
+    el.querySelectorAll<HTMLButtonElement>('.train').forEach((b) => b.addEventListener('click', () => {
+      const why = w.train(b.dataset.line!);
+      if (why) w.log(why, 'error'); else sfx.click();
+      this.respecArmed = false;
+      this.abilityPanel();
+    }));
+    el.querySelector<HTMLButtonElement>('.respec')!.addEventListener('click', () => {
+      if (!this.respecArmed) { this.respecArmed = true; this.abilityPanel(); return; }
+      this.respecArmed = false;
+      const why = w.respec();
+      if (why) w.log(why, 'error');
+      this.abilityPanel();
+    });
     el.querySelectorAll<HTMLElement>('.abil').forEach((d) => {
       d.addEventListener('dragstart', (e) => e.dataTransfer?.setData('text/ability', d.dataset.ab!));
-      d.addEventListener('mouseenter', () => this.hud.tip(abilityTip(d.dataset.ab!), d));
+      d.addEventListener('mouseenter', () => this.hud.tip(abilityTip(d.dataset.ab!, ch.cls), d));
       d.addEventListener('mouseleave', () => this.hud.tip(null));
       d.addEventListener('dblclick', () => {
-        const free = ch.hotbar.indexOf(null);
+        const slot = ch.hotbar.indexOf(null);
         const id = d.dataset.ab!;
-        if (free >= 0 && !ch.hotbar.includes(id) && ABILITIES[id].level <= ch.level) ch.hotbar[free] = id;
+        if (slot >= 0 && !ch.hotbar.includes(id) && p.abilities.includes(id)) ch.hotbar[slot] = id;
       });
     });
   }

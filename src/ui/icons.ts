@@ -93,6 +93,25 @@ function draw(g: CanvasRenderingContext2D, key: string) {
     case 'fangs': g.beginPath(); g.moveTo(16, 16); g.lineTo(26, 48); g.lineTo(30, 16); g.closePath(); g.fill(); g.beginPath(); g.moveTo(34, 16); g.lineTo(38, 48); g.lineTo(48, 16); g.closePath(); g.fill(); break;
     case 'potion': case 'potion2': g.beginPath(); g.moveTo(26, 10); g.lineTo(38, 10); g.lineTo(38, 22); g.quadraticCurveTo(52, 30, 48, 44); g.quadraticCurveTo(44, 56, 32, 56); g.quadraticCurveTo(20, 56, 16, 44); g.quadraticCurveTo(12, 30, 26, 22); g.closePath(); g.stroke(); g.fillStyle = key === 'potion' ? '#ff5a6a' : '#5a8aff'; g.beginPath(); g.arc(32, 42, 12, 0, Math.PI); g.fill(); break;
     case 'attack': sword(g, 14, 50, 50, 14); sword(g, 50, 50, 14, 14); break;
+    // specialization line abilities
+    case 'sweep': sword(g, 14, 50, 46, 18); g.lineWidth = 3; g.beginPath(); g.arc(32, 36, 24, Math.PI * 0.9, Math.PI * 2.1); g.stroke(); break;
+    case 'slam': draw(g, 'shield'); g.lineWidth = 3; line(g, [52, 12, 58, 6]); line(g, [54, 24, 60, 22]); line(g, [44, 8, 46, 2]); break;
+    case 'bulwark': g.lineWidth = 4; g.strokeRect(14, 12, 36, 42); line(g, [14, 26, 50, 26]); line(g, [14, 40, 50, 40]); line(g, [32, 12, 32, 26]); line(g, [24, 26, 24, 40]); line(g, [40, 26, 40, 40]); line(g, [32, 40, 32, 54]); break;
+    case 'lungs': g.lineWidth = 4; for (const y of [22, 34, 46]) { g.beginPath(); g.moveTo(10, y); g.quadraticCurveTo(30, y - 10, 44, y); g.stroke(); } g.beginPath(); g.arc(48, 30, 6, -Math.PI / 2, Math.PI); g.stroke(); break;
+    case 'anchor': line(g, [32, 14, 32, 52]); circle(g, 32, 12, 5); line(g, [22, 24, 42, 24]); g.beginPath(); g.arc(32, 36, 16, 0.2, Math.PI - 0.2); g.stroke(); break;
+    case 'pierce': draw(g, 'arrow'); g.lineWidth = 5; line(g, [24, 22, 40, 38]); break;
+    case 'pin': draw(g, 'arrow'); g.lineWidth = 3; line(g, [8, 56, 56, 56]); line(g, [12, 52, 12, 58]); break;
+    case 'barb': draw(g, 'arrow'); g.lineWidth = 2; for (const t of [0.35, 0.55]) { const x = 12 + 38 * t, y = 52 - 38 * t; line(g, [x, y, x - 6, y - 2]); line(g, [x, y, x + 2, y + 6]); } circle(g, 50, 50, 4, true); break;
+    case 'boot': g.beginPath(); g.moveTo(22, 10); g.lineTo(36, 10); g.lineTo(36, 38); g.lineTo(52, 44); g.lineTo(52, 52); g.lineTo(22, 52); g.closePath(); g.fill(); g.lineWidth = 3; line(g, [6, 30, 16, 30]); line(g, [8, 40, 18, 40]); break;
+    case 'bandage': g.save(); g.translate(32, 32); g.rotate(-Math.PI / 4); g.fillRect(-24, -9, 48, 18); g.fillStyle = '#7a2030'; g.fillRect(-5, -5, 10, 10); g.restore(); break;
+    case 'burn': draw(g, 'fire'); g.fillStyle = '#ffd27a'; circle(g, 32, 44, 6, true); break;
+    case 'shard': g.beginPath(); g.moveTo(52, 10); g.lineTo(26, 32); g.lineTo(14, 54); g.lineTo(34, 40); g.closePath(); g.fill(); break;
+    case 'nova': g.lineWidth = 3; circle(g, 32, 32, 8, true); for (let i = 0; i < 8; i++) { const a = (i / 8) * Math.PI * 2; line(g, [32 + Math.cos(a) * 13, 32 + Math.sin(a) * 13, 32 + Math.cos(a) * 26, 32 + Math.sin(a) * 26]); } break;
+    case 'hail': g.beginPath(); g.ellipse(32, 18, 20, 9, 0, 0, Math.PI * 2); g.fill(); for (const [x, y] of [[18, 36], [30, 44], [42, 36], [24, 54], [40, 52]]) circle(g, x, y, 3.5, true); break;
+    case 'holyfire': draw(g, 'fire'); g.fillStyle = '#3a2a08'; g.fillRect(29, 26, 6, 22); g.fillRect(23, 32, 18, 6); break;
+    case 'wardfaith': draw(g, 'shield'); g.lineWidth = 2; line(g, [24, 28, 40, 28]); break;
+    case 'resolve': g.lineWidth = 4; line(g, [32, 54, 32, 18]); line(g, [20, 30, 32, 16, 44, 30]); g.lineWidth = 2; circle(g, 32, 34, 22); break;
+    case 'faithshield': g.lineWidth = 3; circle(g, 32, 32, 22); circle(g, 32, 32, 14); line(g, [32, 22, 32, 42]); line(g, [24, 30, 40, 30]); break;
     default: circle(g, 32, 32, 14);
   }
 }

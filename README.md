@@ -22,7 +22,7 @@ URL options: `?seed=N` builds a different world (default 7), `?fps` shows the fr
 | Target | Click, `Tab` for the nearest enemy, `Esc` to clear |
 | Fight | `1`–`0` hotbar, `Z` or right-click an enemy to auto-attack, `G` healing draught, `V` power draught |
 | Talk / use | `F` (NPCs, soldiers of your realm, and the banner inside a keep your realm holds) |
-| Windows | `C` character, `I` backpack, `K` abilities (drag them to the hotbar), `M` war map, `F1` help |
+| Windows | `C` character, `I` backpack, `K` abilities and specialization (drag abilities to the hotbar), `M` war map, `F1` help |
 
 ## The game
 
@@ -36,6 +36,8 @@ URL options: `?seed=N` builds a different world (default 7), `?fps` shows the fr
 | Ranger | A longbow with long draws (Aimed Shot, Heart-Seeker) that any hit ruins, so it snares and opens from range. |
 | Runecaller | The hardest-hitting caster: Fire Bolt, Frost Lance, Thunderclap, Starfall. A single blow interrupts a spell, so it roots, kites and uses Focus. |
 | Cleric | Chain mail, a mace, heals (Mend, Renew, Greater Mend, Sanctuary), a stun and Smite. Slow alone, very welcome in a warband. |
+
+**Specialization.** Each class has three lines (Warden: Blades, Shields, Defence; Ranger: Archery, Hunting, Survival; Runecaller: Fire, Frost, Storm; Cleric: Restoration, Smiting, Enhancement). Each level brings 1.5 × that level in points; raising a line from n to n+1 costs n+1, and no line goes above your level. A line unlocks its abilities and sets their strength, so a level 20 hero can max one line and take another to 14, or spread out. Respec in the same window.
 
 **Levelling (1–20).** Monster camps get tougher the farther they are from town, and every monster's name is coloured by how it compares to you (grey, green, blue, yellow, orange, red, purple). Wolves call their packmates, brigands fight in gangs, bog sprites and mistcallers cast, trolls and treants slam, a few named monsters roam with better loot, and you can die. The Taskmaster pays for culling monsters, the Merchant sells potions and gear of your level, and loot drops with up to three bonuses. Other heroes of your realm level in the same fields and chatter in region chat.
 
@@ -57,7 +59,7 @@ On a machine where Playwright's own browser isn't installed, point `PW_CHROMIUM`
 
 | Path | What |
 |---|---|
-| `src/game/` | The simulation, with no DOM: `geo.ts` (the map), `data.ts` (classes, abilities, monsters, curves), `world.ts` (entities, movement, combat, rewards), `ai.ts` (monsters, soldiers, guards, adventurers), `war.ts` (keeps, warbands, the war director), `spawn.ts` (populating a new world) |
+| `src/game/` | The simulation, with no DOM: `geo.ts` (the map), `data.ts` (classes, abilities, monsters, curves), `specs.ts` (specialization lines, points, builds for computer heroes), `world.ts` (entities, movement, combat, rewards), `ai.ts` (monsters, soldiers, guards, adventurers), `war.ts` (keeps, warbands, the war director), `spawn.ts` (populating a new world) |
 | `src/render/` | Three.js: terrain and its painted map, instanced trees, keeps and houses, procedural character rigs (merged per limb to keep draw calls down), sky, day and night, effects, nameplates |
 | `src/ui/` | DOM HUD, windows, title screen, controls, canvas-drawn icons, synthesized sound, saves |
 

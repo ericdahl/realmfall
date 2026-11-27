@@ -62,6 +62,7 @@ function fight(w: World, e: Entity, t: Entity, dt: number) {
 
   // Kiting: casters push away from melee once they have rooted it.
   if (caster && d < 7 && !mob) {
+    if (try_(w, e, 'frost_nova')) return;
     if (try_(w, e, 'flame_ring')) return;
     if (!w.has(t, 'root') && try_(w, e, 'root', t)) return;
     if (w.has(t, 'root') || w.has(t, 'snare')) {
@@ -99,9 +100,14 @@ function fight(w: World, e: Entity, t: Entity, dt: number) {
     case 'warden': {
       if (t.cast && try_(w, e, 'shield_bash', t)) return;
       if (e.hp < e.maxHp * 0.5) try_(w, e, 'rally', e);
+      if (e.hp < e.maxHp * 0.35) try_(w, e, 'bulwark', e);
+      if (e.endu < 25) try_(w, e, 'second_wind', e);
+      if ((w.has(e, 'snare') || w.has(e, 'root')) && d > 4) try_(w, e, 'stand_fast', e);
+      if (countNear(w, e, e, 5) >= 3) try_(w, e, 'sweeping_blow', t);
       if (!e.queuedStyle && e.endu > 20) {
         const ld = e.lastDefense;
         if (ld && ld.kind === 'parry' && w.t - ld.t < 4 && e.abilities.includes('riposte')) e.queuedStyle = 'riposte';
+        else if (ld && ld.kind === 'block' && w.t - ld.t < 4 && e.abilities.includes('shield_slam')) e.queuedStyle = 'shield_slam';
         else if (e.lastStyle?.id === 'backhand' && e.abilities.includes('executioner')) e.queuedStyle = 'executioner';
         else if (e.lastStyle?.id === 'slash' && e.abilities.includes('backhand')) e.queuedStyle = 'backhand';
         else e.queuedStyle = 'slash';
@@ -112,27 +118,39 @@ function fight(w: World, e: Entity, t: Entity, dt: number) {
       if (d < 5) {
         try_(w, e, 'quick_shot', t);
         if (e.hp < e.maxHp * 0.6) try_(w, e, 'evasion', e);
+        if (e.hp < e.maxHp * 0.4) try_(w, e, 'fleet_foot', e);
         return; // melee with the dagger
       }
+      if (e.hp < e.maxHp * 0.5 && t.target !== e.id) try_(w, e, 'field_dressing', e);
+      if (e.endu < 25) try_(w, e, 'second_wind', e);
+      if (!w.has(t, 'snare') && !w.has(t, 'root') && t.weapon.range < 6 && t.target === e.id && d < 16 && try_(w, e, 'pinning_shot', t)) return;
       if (!w.has(t, 'snare') && t.weapon.range < 6 && try_(w, e, 'crippling_arrow', t)) return;
+      if (!w.has(t, 'dot') && w.rng.chance(0.3) && try_(w, e, 'barbed_arrow', t)) return;
+      if (t.target !== e.id && try_(w, e, 'piercing_shot', t)) return;
       if (try_(w, e, 'quick_shot', t)) return;
-      if (e.level >= 15 && countNear(w, e, t, 8) >= 3 && try_(w, e, 'volley', t)) return;
-      if (e.level >= 11 && t.target !== e.id && try_(w, e, 'critical_shot', t)) return;
+      if (countNear(w, e, t, 8) >= 3 && try_(w, e, 'volley', t)) return;
+      if (t.target !== e.id && try_(w, e, 'critical_shot', t)) return;
       try_(w, e, 'aimed_shot', t);
       break;
     }
     case 'runecaller': {
       if (e.power < e.maxPower * 0.1) return; // melee with the staff
       if (e.hp < e.maxHp * 0.6) try_(w, e, 'arcane_shield', e);
-      if (e.level >= 17 && countNear(w, e, t, 9) >= 3 && try_(w, e, 'meteor', t)) return;
+      if (countNear(w, e, t, 9) >= 3 && (try_(w, e, 'meteor', t) || try_(w, e, 'hailstorm', t))) return;
       if (!w.has(t, 'snare') && t.weapon.range < 6 && try_(w, e, 'frost_lance', t)) return;
-      if (e.level >= 13 && w.rng.chance(0.5) && try_(w, e, 'lightning', t)) return;
-      try_(w, e, 'fire_bolt', t);
+      if (!w.has(t, 'dot') && try_(w, e, 'immolate', t)) return;
+      if (w.rng.chance(0.5) && try_(w, e, 'lightning', t)) return;
+      // the main nuke of whichever line is higher
+      const frosty = (e.specs?.frost ?? 1) > (e.specs?.fire ?? 1);
+      for (const ab of frosty ? ['ice_shard', 'frost_lance', 'fire_bolt'] : ['fire_bolt', 'ice_shard']) if (try_(w, e, ab, t)) return;
       break;
     }
     case 'cleric': {
       if (t.cast && try_(w, e, 'holy_stun', t)) return;
-      if (d > 6 && e.power > e.maxPower * 0.4) try_(w, e, 'smite', t);
+      if (d > 6 && e.power > e.maxPower * 0.4) {
+        if (!w.has(t, 'dot') && try_(w, e, 'holy_fire', t)) return;
+        try_(w, e, 'smite', t);
+      }
       break;
     }
   }
@@ -155,8 +173,9 @@ function healSomeone(w: World, e: Entity): boolean {
   });
   if (!best) return false;
   const tgt: Entity = best;
+  if (tgt.hp / tgt.maxHp < 0.35 && !w.has(tgt, 'absorb') && try_(w, e, 'shield_of_faith', tgt)) return true;
   if (!w.has(tgt, 'hot') && try_(w, e, 'renew', tgt)) return true;
-  if (e.level >= 16 && countHurt(w, e) >= 3 && try_(w, e, 'sanctuary', e)) return true;
+  if (countHurt(w, e) >= 3 && try_(w, e, 'sanctuary', e)) return true;
   if (tgt.hp / tgt.maxHp < 0.4 && try_(w, e, 'greater_mend', tgt)) return true;
   return try_(w, e, 'mend', tgt);
 }
