@@ -45,9 +45,9 @@ export class Hud {
       <div class="frame" id="pframe">
         <div class="fname"><span class="lvl"></span><span class="nm"></span></div>
         <div class="sub"></div>
-        <div class="bar hp"><i></i><span></span></div>
-        <div class="bar pw"><i></i><span></span></div>
-        <div class="bar en"><i></i><span></span></div>
+        <div class="bar hp" title="Health"><i></i><span></span></div>
+        <div class="bar pw" title="Power"><i></i><span></span></div>
+        <div class="bar en" title="Endurance: sprinting and styles use it"><i></i><span></span></div>
         <div class="buffs"></div>
       </div>
       <div class="frame" id="tframe">
@@ -394,7 +394,7 @@ export class Hud {
       $(pw, 'span').textContent = `${Math.floor(e.power)} / ${e.maxPower}`;
       const en = $(el, '.en');
       ($(en, 'i')).style.width = `${e.endu}%`;
-      $(en, 'span').textContent = `${Math.floor(e.endu)}%`;
+      $(en, 'span').textContent = `Endurance ${Math.floor(e.endu)}%`;
     }
     const buffs = $(el, '.buffs');
     const parts = e.effects.map((f) => {

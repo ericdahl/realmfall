@@ -7,6 +7,15 @@ export interface Release { version: string; date: string; title: string; notes: 
 
 export const CHANGELOG: Release[] = [
   {
+    version: '0.2.1',
+    date: '2026-11-27',
+    title: 'A green endurance bar',
+    notes: [
+      'The endurance bar under your power bar is now green and labelled, so you can see how much you have left for sprinting and styles.',
+      'Hover over your health, power and endurance bars to see which is which.',
+    ],
+  },
+  {
     version: '0.2.0',
     date: '2026-11-27',
     title: 'New keys, a frame-rate readout and release notes',
