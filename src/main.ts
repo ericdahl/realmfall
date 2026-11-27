@@ -5,6 +5,7 @@ import { ABILITIES, CON_HEX, conColor, CLASSES, MAX_LEVEL, type ClassId } from '
 import { REALM_DEFS, KEEPS, type RealmId } from './game/geo';
 import { makeItem, SLOTS } from './game/items';
 import { Rng } from './game/rng';
+import { autoSpec, BUILDS, knownAbilities } from './game/specs';
 import { Renderer } from './render/scene';
 import { Controls } from './ui/controls';
 import { Hud } from './ui/hud';
@@ -267,7 +268,8 @@ function boot() {
       c.level = lvl;
       const r = new Rng(5);
       for (const s of SLOTS) c.equip[s] = makeItem(r, cls, lvl, { slot: s, rarity: 1 });
-      CLASSES[cls].abilities.filter((a) => ABILITIES[a].level <= lvl).forEach((a, i) => { if (i < 10) c.hotbar[i] = a; });
+      c.specs = autoSpec(cls, lvl, BUILDS[cls][0]);
+      knownAbilities(cls, c.specs).forEach((a, i) => { if (i < 10) c.hotbar[i] = a; });
     }
     start(c);
     if (params.get('at') === 'frontier') {

@@ -6,7 +6,7 @@ import { Rng } from './rng';
 import { Geo, REALM_DEFS, KEEPS, siteById, KEEP_HALF, FRONTIER_R, type RealmId, type Site } from './geo';
 import {
   ABILITIES, CLASSES, MOB_BY_ID, WEAPONS, RUN_SPEED, SPRINT_SPEED, MAX_LEVEL, xpToNext, mobXp, conColor, CON_XP,
-  realmRank, RANK_TITLES, type AbilityDef, type ClassId, type MobDef, type EffectDef,
+  realmRank, RANK_TITLES, type AbilityDef, type ClassId, type MobDef, type EffectDef, type BuffStat,
 } from './data';
 import { classDerived, mobDerived } from './stats';
 import { makeItem, potion, starterKit, SLOTS, shopPrice, type Item } from './items';
@@ -15,8 +15,10 @@ import { thinkMob, thinkCombatant } from './ai';
 import { War, type KeepState } from './war';
 import { populate } from './spawn';
 import { clamp } from './noise';
+import { LINES, BUILDS, autoSpec, baseSpecs, knownAbilities, lineOf, passiveFrac, freePoints, pointsForLevel, respecCost } from './specs';
 
-export const SAVE_VERSION = 1;
+/** 2: specialization lines (`specs`). */
+export const SAVE_VERSION = 2;
 export const TICK = 1 / 20;
 
 export interface Segment { ax: number; az: number; bx: number; bz: number; door?: number }
@@ -178,7 +180,11 @@ export class World {
     this.applyDerived(e);
     e.hp = e.maxHp;
     e.power = e.maxPower;
-    e.abilities = CLASSES[cls].abilities.filter((a) => ABILITIES[a].level <= level);
+    const builds = BUILDS[cls];
+    e.specs = autoSpec(cls, level, builds[e.id % builds.length]);
+    this.applyDerived(e);
+    e.hp = e.maxHp;
+    e.abilities = knownAbilities(cls, e.specs);
     return e;
   }
 
@@ -224,6 +230,13 @@ export class World {
     e.block = d.block;
     e.evade = d.evade;
     e.shield = d.shield;
+    if (e.specs) {
+      // defensive lines: half the class's chance at 1, all of it at your level
+      const f = (p: 'parry' | 'block' | 'evade') => 0.5 + 0.5 * (passiveFrac(e.cls!, e.specs!, e.level, p) ?? 1);
+      e.parry *= f('parry');
+      e.block *= f('block');
+      e.evade *= f('evade');
+    }
     e.hp = Math.min(e.maxHp, Math.round(e.maxHp * hpFrac));
     if (e.kind === 'player' && this.char) {
       const rr = realmRank(this.char.rp);
@@ -237,10 +250,11 @@ export class World {
     const rng = new Rng(seed);
     const town = siteById(`town${realm}`);
     const hotbar: (string | null)[] = new Array(10).fill(null);
-    CLASSES[cls].abilities.filter((a) => ABILITIES[a].level <= 1).forEach((a, i) => (hotbar[i] = a));
+    const specs = baseSpecs(cls);
+    knownAbilities(cls, specs).forEach((a, i) => (hotbar[i] = a));
     return {
       version: SAVE_VERSION, id: `${Date.now().toString(36)}${Math.floor(rng.next() * 1e6).toString(36)}`,
-      name, realm, cls, level: 1, xp: 0, copper: 150, rp: 0,
+      name, realm, cls, level: 1, xp: 0, copper: 150, rp: 0, specs,
       equip: starterKit(rng, cls), bag: [], potions: { health: 3, power: cls === 'runecaller' || cls === 'cleric' ? 2 : 0 },
       hotbar, x: town.x + Math.cos(town.facing) * 8, z: town.z + Math.sin(town.facing) * 8,
       kills: 0, realmKills: 0, deaths: 0, task: null, created: Date.now(), played: 0,
@@ -251,11 +265,12 @@ export class World {
     this.char = char;
     const e = this.baseEntity('player', char.name, char.realm, char.level, char.x, char.z);
     e.cls = char.cls;
+    e.specs = char.specs;
     this.player = e;
     this.applyDerived(e);
     e.hp = e.maxHp;
     e.power = e.maxPower;
-    e.abilities = CLASSES[char.cls].abilities.filter((a) => ABILITIES[a].level <= char.level);
+    e.abilities = knownAbilities(char.cls, char.specs);
     const town = siteById(`town${char.realm}`);
     e.facing = Math.atan2(town.z - char.z, town.x - char.x) + Math.PI;
     this.add(e);
@@ -419,7 +434,7 @@ export class World {
           e.sprinting = false;
           this.plog(e, 'You are too tired to sprint.', 'error');
         }
-      } else e.endu = Math.min(100, e.endu + (ooc ? 12 : 3.5));
+      } else e.endu = Math.min(100, e.endu + (ooc ? 12 : 3.5) + this.buffSum(e, 'endu'));
       if (e.kind === 'mob' && e.ai.mode === 'return') e.hp = Math.min(e.maxHp, e.hp + e.maxHp * 0.2);
     }
     this.war.everySecond();
@@ -587,8 +602,18 @@ export class World {
     let perTick: number | undefined;
     if (def.type === 'buff') { name = def.name; stat = def.stat; }
     if (def.type === 'dot') { perTick = Math.max(1, Math.round(hitDmg * def.value)); name = 'bleed'; }
-    if (def.type === 'hot') { perTick = Math.max(1, Math.round(healAmt)); name = 'Renew'; }
-    if (def.type === 'absorb') { value = Math.round(e.maxHp * def.value); name = 'Rune Ward'; }
+    if (def.type === 'hot') { perTick = Math.max(1, Math.round(healAmt)); name = def.name ?? 'Renew'; }
+    if (def.type === 'absorb') { value = Math.round(e.maxHp * def.value); name = def.name ?? 'Rune Ward'; }
+    if (def.type === 'restore') {
+      e.endu = Math.min(100, e.endu + def.value);
+      this.plog(e, 'You catch your second wind.', 'spell');
+      return;
+    }
+    if (def.type === 'freedom') { name = 'Stand Fast'; e.effects = e.effects.filter((f) => f.type !== 'snare' && f.type !== 'root'); }
+    if ((def.type === 'snare' || def.type === 'root') && this.has(e, 'freedom')) {
+      this.plog(src, `${cap(e.name)} stands fast!`, 'error');
+      return;
+    }
     if (def.type === 'stun' || def.type === 'root') {
       // short immunity after a stun or root wears off
       const imm = e.effects.find((f) => f.type === def.type);
@@ -612,7 +637,7 @@ export class World {
     if (def.type === 'stun') { this.plog(e, 'You are stunned!', 'hit-in'); this.plog(src, `${cap(e.name)} is stunned!`, 'spell'); }
     if (def.type === 'root') { this.plog(e, 'You are rooted to the ground!', 'hit-in'); this.plog(src, `${cap(e.name)} is rooted!`, 'spell'); }
     if (def.type === 'snare') this.plog(src, `${cap(e.name)} slows down!`, 'spell');
-    if (def.type === 'buff' || def.type === 'absorb' || def.type === 'hot') this.events.push({ type: 'buff', id: e.id, name });
+    if (def.type === 'buff' || def.type === 'absorb' || def.type === 'hot' || def.type === 'freedom') this.events.push({ type: 'buff', id: e.id, name });
   }
 
   private updateEffects(e: Entity) {
@@ -632,7 +657,7 @@ export class World {
           const im = ((e as Entity & { immune?: Record<string, number> }).immune ??= {});
           im[f.type] = now + (f.type === 'stun' ? 8 : 12);
         }
-        if (e === this.player && (f.type === 'buff' || f.type === 'absorb')) this.log(`${f.name} fades.`, 'spell');
+        if (e === this.player && (f.type === 'buff' || f.type === 'absorb' || f.type === 'freedom')) this.log(`${f.name} fades.`, 'spell');
       }
     }
   }
@@ -640,7 +665,7 @@ export class World {
   has(e: Entity, type: Effect['type']) {
     return e.effects.some((f) => f.type === type);
   }
-  buffSum(e: Entity, stat: 'dmg' | 'armor' | 'evade' | 'speed') {
+  buffSum(e: Entity, stat: BuffStat) {
     let s = 0;
     for (const f of e.effects) if (f.type === 'buff' && f.stat === stat) s += f.value;
     return s;
@@ -706,6 +731,7 @@ export class World {
       a.lastStyle = { id: style.id, t: this.t };
     } else a.lastStyle = null;
     if (!ranged && a.cls) mult *= CLASSES[a.cls].melee;
+    mult *= this.weaponSpec(a, ranged);
     const base = a.weapon.dps * a.weapon.speed * this.statMul(a, ranged ? 'dex' : 'str');
     const { amount, crit } = this.mitigate(a, d, base * mult * this.rng.range(0.85, 1.15), ranged ? 0.1 : 0.08, true);
     if (a === this.player) {
@@ -730,6 +756,20 @@ export class World {
       if (behind < Math.PI / 3 && d.target === a.id) return 'You must be beside or behind your target!';
     }
     return null;
+  }
+
+  /** Weapon lines: three-quarters damage at 1, full damage at your level. */
+  weaponSpec(a: Entity, ranged: boolean) {
+    if (!a.cls || !a.specs) return 1;
+    const f = passiveFrac(a.cls, a.specs, a.level, ranged ? 'ranged' : 'melee');
+    return f === null ? 1 : 0.75 + 0.25 * f;
+  }
+
+  /** The level a spell or heal is cast at: its line's level, never above your own. */
+  powerLevel(e: Entity, ab: AbilityDef) {
+    if (!e.cls || !e.specs) return e.level;
+    const l = lineOf(e.cls, ab.id);
+    return l ? Math.min(e.level, e.specs[l.id] ?? 1) : e.level;
   }
 
   statMul(a: Entity, stat: 'str' | 'dex' | 'int' | 'pie') {
@@ -958,7 +998,7 @@ export class World {
     const [a, b] = ab.power!;
     const stat = ab.school === 'holy' ? 'pie' : 'int';
     const mul = e.mob ? 0.85 * e.dmgMul * (1 + this.buffSum(e, 'dmg')) : this.statMul(e, stat);
-    return (a + b * e.level) * mul * this.rng.range(0.9, 1.1);
+    return (a + b * this.powerLevel(e, ab)) * mul * this.rng.range(0.9, 1.1);
   }
 
   private resolve(e: Entity, ab: AbilityDef, target: Entity | undefined) {
@@ -1016,8 +1056,8 @@ export class World {
           this.reportAvoid(e, v, res);
           continue;
         }
-        const base = e.weapon.dps * e.weapon.speed * this.statMul(e, ranged ? 'dex' : 'str');
-        ({ amount, crit } = this.mitigate(e, v, base * (1 + ab.bonus) * this.rng.range(0.9, 1.1), 0.1, true));
+        const base = e.weapon.dps * e.weapon.speed * this.statMul(e, ranged ? 'dex' : 'str') * this.weaponSpec(e, ranged);
+        ({ amount, crit } = this.mitigate(e, v, base * (1 + ab.bonus) * this.rng.range(0.9, 1.1), 0.1, !ab.pierce));
       }
       if (amount > 0) {
         if (e === this.player) this.log(`You hit ${nm(v)} with ${ab.name} for ${amount} damage!${crit ? ' (Critical hit!)' : ''}`, 'hit-out');
@@ -1132,15 +1172,53 @@ export class World {
     p.power = p.maxPower;
     this.log(`You have reached level ${ch.level}!`, 'xp');
     this.events.push({ type: 'levelup', level: ch.level });
-    for (const a of CLASSES[ch.cls].abilities) {
-      const ab = ABILITIES[a];
-      if (ab.level === ch.level && !p.abilities.includes(a)) {
-        p.abilities.push(a);
-        this.log(`You learn ${ab.name}!`, 'system');
-        const free = ch.hotbar.indexOf(null);
-        if (free >= 0 && !ch.hotbar.includes(a)) ch.hotbar[free] = a;
-      }
+    this.log(`You get ${pointsForLevel(ch.level)} specialization points. You have ${freePoints(ch.level, ch.specs)} to spend: open Abilities (K) to train.`, 'system');
+  }
+
+  // ---------- specialization ----------
+
+  /** Raises one of the hero's lines by a level. Returns a reason if it can't. */
+  train(lineId: string): string | null {
+    const ch = this.char!;
+    const line = LINES[ch.cls].find((l) => l.id === lineId);
+    if (!line) return 'Unknown line.';
+    const cur = ch.specs[lineId] ?? 1;
+    if (cur >= ch.level) return `${line.name} can't go above your level.`;
+    if (freePoints(ch.level, ch.specs) < cur + 1) return `You need ${cur + 1} points to raise ${line.name}.`;
+    ch.specs[lineId] = cur + 1;
+    this.log(`You raise ${line.name} to ${cur + 1}.`, 'system');
+    this.relearn();
+    return null;
+  }
+
+  /** Clears every line back to 1 and refunds the points. */
+  respec(): string | null {
+    const ch = this.char!;
+    const cost = ch.freeRespec ? 0 : respecCost(ch.level);
+    if (ch.copper < cost) return `A respec costs ${moneyText(cost)}.`;
+    ch.copper -= cost;
+    ch.freeRespec = false;
+    for (const k of Object.keys(ch.specs)) delete ch.specs[k];
+    Object.assign(ch.specs, baseSpecs(ch.cls));
+    this.log(`Your lines are back to 1. You have ${freePoints(ch.level, ch.specs)} points to spend.${cost ? ` (${moneyText(cost)})` : ''}`, 'system');
+    this.relearn();
+    return null;
+  }
+
+  /** After lines change: learn and forget abilities, and keep the hotbar to what you know. */
+  private relearn() {
+    const ch = this.char!, p = this.player!;
+    const known = knownAbilities(ch.cls, ch.specs);
+    for (const a of known) {
+      if (p.abilities.includes(a)) continue;
+      this.log(`You learn ${ABILITIES[a].name}!`, 'system');
+      const free = ch.hotbar.indexOf(null);
+      if (free >= 0 && !ch.hotbar.includes(a)) ch.hotbar[free] = a;
     }
+    p.abilities = known;
+    ch.hotbar = ch.hotbar.map((a) => (a && known.includes(a) ? a : null));
+    if (p.queuedStyle && !known.includes(p.queuedStyle)) p.queuedStyle = null;
+    this.applyDerived(p);
   }
 
   private loot(d: Entity, con: string) {

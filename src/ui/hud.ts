@@ -2,13 +2,14 @@
 import type { World } from '../game/world';
 import { nm, cap, plural } from '../game/world';
 import type { Entity, GameEvent, LogKind } from '../game/types';
-import { ABILITIES, CLASSES, CON_HEX, conColor, xpToNext, MAX_LEVEL, realmRank, RANK_TITLES, REALM_RANKS } from '../game/data';
+import { ABILITIES, CLASSES, type ClassId, CON_HEX, conColor, xpToNext, MAX_LEVEL, realmRank, RANK_TITLES, REALM_RANKS } from '../game/data';
 import { REALM_DEFS, WORLD_R, KEEPS } from '../game/geo';
 import type { Renderer } from '../render/scene';
 import { iconUrl } from './icons';
 import { sfx } from './audio';
 import { formatMoney } from '../game/items';
 import { ownerColor } from '../render/structures';
+import { LINES, freePoints, lineOf } from '../game/specs';
 
 const $ = <T extends HTMLElement = HTMLElement>(root: ParentNode, sel: string) => root.querySelector(sel) as T;
 
@@ -45,9 +46,9 @@ export class Hud {
       <div class="frame" id="pframe">
         <div class="fname"><span class="lvl"></span><span class="nm"></span></div>
         <div class="sub"></div>
-        <div class="bar hp"><i></i><span></span></div>
-        <div class="bar pw"><i></i><span></span></div>
-        <div class="bar en"><i></i><span></span></div>
+        <div class="bar hp" title="Health"><i></i><span></span></div>
+        <div class="bar pw" title="Power"><i></i><span></span></div>
+        <div class="bar en" title="Endurance: sprinting and styles use it"><i></i><span></span></div>
         <div class="buffs"></div>
       </div>
       <div class="frame" id="tframe">
@@ -163,7 +164,7 @@ export class Hud {
     if (i === 11) return this.tip(`<b>Draught of Clarity</b><br>Restores 45% of your power. 25 s cooldown.<br><i>Key: V</i>`, el);
     const id = ch.hotbar[i];
     if (!id) return this.tip(`<i>Empty. Drag an ability here from the Abilities window (K).</i>`, el);
-    this.tip(abilityTip(id), el);
+    this.tip(abilityTip(id, this.w.char?.cls), el);
   }
 
   private seq = 0;
@@ -394,12 +395,12 @@ export class Hud {
       $(pw, 'span').textContent = `${Math.floor(e.power)} / ${e.maxPower}`;
       const en = $(el, '.en');
       ($(en, 'i')).style.width = `${e.endu}%`;
-      $(en, 'span').textContent = `${Math.floor(e.endu)}%`;
+      $(en, 'span').textContent = `Endurance ${Math.floor(e.endu)}%`;
     }
     const buffs = $(el, '.buffs');
     const parts = e.effects.map((f) => {
       const left = Math.max(0, Math.ceil(f.until - w.t));
-      const good = f.type === 'buff' || f.type === 'hot' || f.type === 'absorb' || f.type === 'focus';
+      const good = (f.type === 'buff' && f.value >= 0) || f.type === 'hot' || f.type === 'absorb' || f.type === 'focus' || f.type === 'freedom';
       const label = f.type === 'snare' ? 'Slowed' : f.type === 'stun' ? 'Stunned' : f.type === 'root' ? 'Rooted' : f.type === 'dot' ? 'Bleeding' : f.type === 'taunt' ? 'Taunted' : f.type === 'focus' ? 'Focus' : f.name;
       return `<span class="${good ? 'good' : 'bad'}">${label} ${left > 99 ? Math.ceil(left / 60) + 'm' : left + 's'}</span>`;
     });
@@ -409,6 +410,13 @@ export class Hud {
   }
 
   private hotbar() {
+    const c = this.w.char;
+    if (c) {
+      const free = freePoints(c.level, c.specs);
+      const canTrain = LINES[c.cls].some((l) => (c.specs[l.id] ?? 1) < c.level && free >= (c.specs[l.id] ?? 1) + 1);
+      const btn = this.root.querySelector<HTMLElement>('#menubar [data-b="abilities"]');
+      if (btn && btn.classList.contains('glow') !== canTrain) btn.classList.toggle('glow', canTrain);
+    }
     const w = this.w;
     const p = w.player!;
     const ch = w.char!;
@@ -546,7 +554,7 @@ function roleName(e: Entity) {
   return e.role === 'merchant' ? 'Merchant' : e.role === 'teleporter' ? 'Porter' : e.role === 'healer' ? 'Healer' : e.role === 'taskmaster' ? 'Taskmaster' : 'Gatekeeper';
 }
 
-export function abilityTip(id: string) {
+export function abilityTip(id: string, cls?: ClassId) {
   const ab = ABILITIES[id];
   const bits: string[] = [];
   if (ab.kind === 'style') bits.push('Style (next swing)');
@@ -555,7 +563,8 @@ export function abilityTip(id: string) {
   if (ab.cd) bits.push(`Recast ${ab.cd}s`);
   if (ab.range && ab.kind !== 'style') bits.push(`Range ${ab.range}m`);
   bits.push(ab.costType === 'endu' ? `${ab.cost} endurance` : `${ab.cost}% power`);
-  return `<b>${ab.name}</b> <small>level ${ab.level}</small><br><span class="meta">${bits.join(' · ')}</span><br>${ab.desc}`;
+  const line = cls ? lineOf(cls, id) : undefined;
+  return `<b>${ab.name}</b> <small>${line ? `${line.name} ${ab.level}` : `level ${ab.level}`}</small><br><span class="meta">${bits.join(' · ')}</span><br>${ab.desc}`;
 }
 
 export { nm, KEEPS };
