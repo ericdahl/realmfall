@@ -2,20 +2,24 @@
 import type { RealmId } from './geo';
 
 /** What a class does in a fight. Every realm has one class of each. */
-export type Role = 'tank' | 'archer' | 'caster' | 'healer';
+export type Role = 'tank' | 'archer' | 'caster' | 'healer' | 'stealther';
+/** Roles that fight in warbands and garrisons, in the order they're drawn. */
 export const ROLES: Role[] = ['tank', 'archer', 'caster', 'healer'];
+export const ALL_ROLES: Role[] = [...ROLES, 'stealther'];
 export type ClassId =
   | 'warden' | 'yeoman' | 'wizard' | 'cleric' // Valmora
   | 'thornguard' | 'ranger' | 'mistweaver' | 'druid' // Eldwyn
-  | 'huskarl' | 'hunter' | 'runecarver' | 'seer'; // Hroth
+  | 'huskarl' | 'hunter' | 'runecarver' | 'seer' // Hroth
+  | 'cutthroat' | 'shade' | 'nightwolf'; // stealth, one per realm
 export type StatId = 'str' | 'con' | 'dex' | 'int' | 'pie';
 export const STATS: StatId[] = ['str', 'con', 'dex', 'int', 'pie'];
 export const STAT_NAMES: Record<StatId, string> = { str: 'Strength', con: 'Constitution', dex: 'Dexterity', int: 'Intelligence', pie: 'Piety' };
 
-export type WeaponKind = 'sword' | 'axe' | 'bow' | 'staff' | 'mace' | 'claws' | 'fangs' | 'fists' | 'branch' | 'spores';
+export type WeaponKind = 'sword' | 'axe' | 'dagger' | 'bow' | 'staff' | 'mace' | 'claws' | 'fangs' | 'fists' | 'branch' | 'spores';
 export const WEAPONS: Record<WeaponKind, { speed: number; range: number; verb: string; noun: string; ranged?: boolean }> = {
   sword: { speed: 3.4, range: 3.6, verb: 'attack', noun: 'sword' },
   axe: { speed: 3.6, range: 3.6, verb: 'attack', noun: 'axe' },
+  dagger: { speed: 2.6, range: 3.2, verb: 'stab', noun: 'daggers' },
   bow: { speed: 4.2, range: 38, verb: 'shoot', noun: 'bow', ranged: true },
   staff: { speed: 4.0, range: 3.8, verb: 'attack', noun: 'staff' },
   mace: { speed: 3.6, range: 3.6, verb: 'attack', noun: 'mace' },
@@ -67,6 +71,11 @@ const TEMPLATES: Record<Role, Template> = {
     base: { str: 30, con: 40, dex: 50, int: 65, pie: 35 }, growth: { str: 0, con: 1, dex: 1, int: 3, pie: 0 },
     weapon: 'staff', armor: 'cloth', parry: 0, block: 0, evade: 0.04, melee: 0.55,
   },
+  stealther: {
+    hpPerLevel: 14, powerStat: null,
+    base: { str: 50, con: 45, dex: 60, int: 30, pie: 35 }, growth: { str: 1.5, con: 1.5, dex: 2, int: 0, pie: 0.5 },
+    weapon: 'dagger', armor: 'leather', parry: 0.06, block: 0, evade: 0.12, melee: 1.15,
+  },
   healer: {
     hpPerLevel: 16, powerStat: 'pie',
     base: { str: 45, con: 50, dex: 40, int: 30, pie: 65 }, growth: { str: 1, con: 1.5, dex: 0.5, int: 0, pie: 2.5 },
@@ -93,6 +102,10 @@ export const CLASSES: Record<ClassId, ClassDef> = {
   huskarl: cls('huskarl', 'Huskarl', 2, 'tank', 'Axe, shield and fury', 'An axe and a round shield. Axe styles bleed and split skulls, and Fury trades armour for blood: Berserk, War Cry and a refusal to fall.', { weapon: 'axe', block: 0.12, melee: 1.3 }),
   hunter: cls('hunter', 'Hunter', 2, 'archer', 'Bow', 'A Hroth bow in the snow. Long draws, crippling arrows and the hardiness to outlast what it hunts.'),
   runecarver: cls('runecarver', 'Runecarver', 2, 'caster', 'Runes, frost and darkness', 'Carves runes that bind and burst, freezes what comes close, and drinks the life of its enemies through the dark.'),
+  // stealth
+  cutthroat: cls('cutthroat', 'Cutthroat', 0, 'stealther', 'Daggers, shadows and poison', 'Works the alleys of the river kingdom: hides, opens from behind with Ambush or Garrote, and coats its daggers in poisons that bleed, slow and numb.'),
+  shade: cls('shade', 'Shade', 1, 'stealther', 'Daggers, shadows and night', 'Half in the mists: hides, opens from behind, then blinds and dances out of reach with the night’s own tricks.'),
+  nightwolf: cls('nightwolf', 'Nightwolf', 2, 'stealther', 'Daggers, shadows and savagery', 'Hunts the fjords after dark: hides, pounces on its prey, and tears it open in a frenzy.', { melee: 1.2 }),
   seer: cls('seer', 'Seer', 2, 'healer', 'Healing, storm and augury', 'Heals, calls lightning down on the realm’s enemies, and reads the fates for haste and foresight.'),
 };
 export const CLASS_IDS = Object.keys(CLASSES) as ClassId[];
@@ -115,6 +128,10 @@ export type EffectDef =
   | { type: 'restore'; dur: 0; value: number } // endurance, at once
   | { type: 'freedom'; dur: number } // clears and wards off snares and roots
   | { type: 'thorns'; dur: number; value: number } // share of melee damage taken that hurts the attacker
+  | { type: 'hide'; dur: 0 } // step into the shadows (or out of them)
+  | { type: 'vanish'; dur: 0 } // hide even in a fight, and shake off whoever was after you
+  | { type: 'imbue'; dur: number; name: string; proc: EffectDef } // every melee hit lands proc on the target
+  | { type: 'step'; dur: 0 } // the caster appears behind the target
   | { type: 'focus'; dur: number }
   | { type: 'taunt'; dur: number };
 
@@ -140,7 +157,10 @@ export interface AbilityDef {
   /** spell damage or heal: a + b * level */
   power?: [number, number];
   heal?: boolean;
-  req?: { pos?: 'behind' | 'side'; after?: 'parry' | 'block' | 'evade'; follow?: string; shield?: boolean };
+  /** pos side: beside or behind a target that faces you. pos behind: behind it, whatever it faces. stealth: only from hiding. */
+  req?: { pos?: 'behind' | 'side'; after?: 'parry' | 'block' | 'evade'; follow?: string; shield?: boolean; stealth?: boolean };
+  /** using it doesn't bring you out of hiding */
+  keepsHidden?: boolean;
   effects?: EffectDef[];
   /** weapon damage that ignores armour */
   pierce?: boolean;
@@ -259,6 +279,30 @@ export const ABILITIES: Record<string, AbilityDef> = {
   foresight: { id: 'foresight', name: 'Foresight', icon: 'eye', desc: '+6% chance to evade for you and realm-mates within 20 m, for 10 minutes.', level: 1, kind: 'instant', costType: 'power', cost: 8, cd: 10, radius: 20, target: 'pbaoeAlly', school: 'energy', effects: [{ type: 'buff', dur: 600, stat: 'evade', value: 0.06, name: 'Foresight' }] },
   haste: { id: 'haste', name: 'Haste', icon: 'haste', desc: 'You and realm-mates within 20 m swing and cast 15% faster, for 10 minutes.', level: 5, kind: 'instant', costType: 'power', cost: 10, cd: 10, radius: 20, target: 'pbaoeAlly', school: 'energy', effects: [{ type: 'buff', dur: 600, stat: 'haste', value: 0.15, name: 'Haste' }] },
   fates_ward: { id: 'fates_ward', name: 'Fate’s Ward', icon: 'faithshield', desc: 'The fates turn a blow: absorbs damage equal to a quarter of a friend’s life, for 20 seconds.', level: 16, kind: 'instant', costType: 'power', cost: 12, cd: 30, range: 30, target: 'ally', school: 'energy', effects: [{ type: 'absorb', dur: 20, value: 0.25, name: 'Fate’s Ward' }] },
+
+  // Stealth: Daggers and Shadows (shared), Poisons (Cutthroat), Night (Shade), Savagery (Nightwolf)
+  stab: { id: 'stab', name: 'Stab', icon: 'dagger', desc: 'A quick thrust. Opens Twist.', level: 1, kind: 'style', costType: 'endu', cost: 4, target: 'enemy', school: 'melee', bonus: 0.35 },
+  twist: { id: 'twist', name: 'Twist the Knife', icon: 'chain', desc: 'Follows Stab. Opens Eviscerate.', level: 4, kind: 'style', costType: 'endu', cost: 5, target: 'enemy', school: 'melee', bonus: 0.9, req: { follow: 'stab' } },
+  low_blow: { id: 'low_blow', name: 'Low Blow', icon: 'flank', desc: 'From the side or behind: hits hard and slows the target by 30% for 8 seconds.', level: 8, kind: 'style', costType: 'endu', cost: 6, target: 'enemy', school: 'melee', bonus: 1.2, req: { pos: 'side' }, effects: [{ type: 'snare', dur: 8, value: 0.3 }] },
+  eviscerate: { id: 'eviscerate', name: 'Eviscerate', icon: 'gash', desc: 'Follows Twist the Knife. A vicious finishing cut.', level: 12, kind: 'style', costType: 'endu', cost: 8, target: 'enemy', school: 'melee', bonus: 2.3, req: { follow: 'twist' } },
+  fan_of_knives: { id: 'fan_of_knives', name: 'Fan of Knives', icon: 'fan', desc: 'Throws knives at every enemy within 5 metres.', level: 16, kind: 'instant', costType: 'endu', cost: 12, cd: 20, radius: 5, target: 'pbaoe', school: 'melee', bonus: 0.25 },
+  stealth: { id: 'stealth', name: 'Stealth', icon: 'cloak', desc: 'Step into the shadows. Enemies only see you up close, and you move more slowly. Attacking, casting or being hurt brings you out. Not in a fight.', level: 1, kind: 'instant', costType: 'endu', cost: 0, cd: 2, target: 'self', school: 'melee', keepsHidden: true, effects: [{ type: 'hide', dur: 0 }] },
+  ambush: { id: 'ambush', name: 'Ambush', icon: 'ambush', desc: 'From hiding, behind the target: a devastating opening blow.', level: 2, kind: 'style', costType: 'endu', cost: 10, target: 'enemy', school: 'melee', bonus: 2.4, req: { stealth: true, pos: 'behind' } },
+  garrote: { id: 'garrote', name: 'Garrote', icon: 'garrote', desc: 'From hiding: chokes the target, stunning it for 4 seconds.', level: 6, kind: 'style', costType: 'endu', cost: 10, target: 'enemy', school: 'melee', bonus: 0.3, req: { stealth: true }, effects: [{ type: 'stun', dur: 4 }] },
+  shadowstep: { id: 'shadowstep', name: 'Shadowstep', icon: 'step', desc: 'Step through the shadows to just behind the target, without leaving them.', level: 10, kind: 'instant', costType: 'endu', cost: 8, cd: 30, range: 25, target: 'enemy', school: 'melee', keepsHidden: true, effects: [{ type: 'step', dur: 0 }] },
+  vanish: { id: 'vanish', name: 'Vanish', icon: 'vanish', desc: 'Disappear even in the middle of a fight. Whoever was fighting you loses you.', level: 14, kind: 'instant', costType: 'endu', cost: 10, cd: 120, target: 'self', school: 'melee', keepsHidden: true, effects: [{ type: 'vanish', dur: 0 }] },
+  deadly_poison: { id: 'deadly_poison', name: 'Deadly Poison', icon: 'vial', desc: 'Coats your daggers for 10 minutes: every hit poisons the target for 9 seconds.', level: 1, kind: 'instant', costType: 'endu', cost: 0, cd: 5, target: 'self', school: 'nature', keepsHidden: true, effects: [{ type: 'imbue', dur: 600, name: 'Deadly Poison', proc: { type: 'dot', dur: 9, value: 0.08 } }] },
+  crippling_poison: { id: 'crippling_poison', name: 'Crippling Poison', icon: 'vial2', desc: 'Coats your daggers for 10 minutes: every hit slows the target by 35% for 6 seconds.', level: 5, kind: 'instant', costType: 'endu', cost: 0, cd: 5, target: 'self', school: 'nature', keepsHidden: true, effects: [{ type: 'imbue', dur: 600, name: 'Crippling Poison', proc: { type: 'snare', dur: 6, value: 0.35 } }] },
+  numbing_poison: { id: 'numbing_poison', name: 'Numbing Poison', icon: 'vial3', desc: 'Coats your daggers for 10 minutes: every hit makes the target swing and cast 25% slower for 8 seconds.', level: 10, kind: 'instant', costType: 'endu', cost: 0, cd: 5, target: 'self', school: 'nature', keepsHidden: true, effects: [{ type: 'imbue', dur: 600, name: 'Numbing Poison', proc: { type: 'buff', dur: 8, stat: 'haste', value: -0.25, name: 'Numbed' } }] },
+  smoke_bomb: { id: 'smoke_bomb', name: 'Smoke Bomb', icon: 'smoke', desc: 'Choking smoke around you (8 m): enemies miss 40% more often for 8 seconds.', level: 15, kind: 'instant', costType: 'endu', cost: 10, cd: 45, radius: 8, target: 'pbaoe', school: 'nature', effects: [{ type: 'buff', dur: 8, stat: 'hit', value: -0.4, name: 'Blinded' }] },
+  night_veil: { id: 'night_veil', name: 'Night Veil', icon: 'moon', desc: '+15% chance to evade for 20 seconds.', level: 1, kind: 'instant', costType: 'endu', cost: 8, cd: 45, target: 'self', school: 'void', keepsHidden: true, effects: [{ type: 'buff', dur: 20, stat: 'evade', value: 0.15, name: 'Night Veil' }] },
+  blind: { id: 'blind', name: 'Blind', icon: 'dazzle', desc: 'Throws darkness in the target’s eyes: it misses 40% more often for 8 seconds.', level: 5, kind: 'instant', costType: 'endu', cost: 8, cd: 25, range: 10, target: 'enemy', school: 'void', effects: [{ type: 'buff', dur: 8, stat: 'hit', value: -0.4, name: 'Blinded' }] },
+  moonblade: { id: 'moonblade', name: 'Moonblade', icon: 'moonblade', desc: 'A cut of cold moonlight that keeps burning for 10 seconds.', level: 9, kind: 'style', costType: 'endu', cost: 7, target: 'enemy', school: 'melee', bonus: 1.0, effects: [{ type: 'dot', dur: 10, value: 0.06 }] },
+  shadow_dance: { id: 'shadow_dance', name: 'Shadow Dance', icon: 'haste', desc: 'Swing 30% faster and evade 10% more for 15 seconds.', level: 14, kind: 'instant', costType: 'endu', cost: 10, cd: 90, target: 'self', school: 'void', effects: [{ type: 'buff', dur: 15, stat: 'haste', value: 0.3, name: 'Shadow Dance' }, { type: 'buff', dur: 15, stat: 'evade', value: 0.1, name: 'Shadow Dance (evade)' }] },
+  frenzy: { id: 'frenzy', name: 'Frenzy', icon: 'rage', desc: 'Swing 20% faster for 20 seconds, but 10% less armour.', level: 1, kind: 'instant', costType: 'endu', cost: 8, cd: 60, target: 'self', school: 'melee', effects: [{ type: 'buff', dur: 20, stat: 'haste', value: 0.2, name: 'Frenzy' }, { type: 'buff', dur: 20, stat: 'armor', value: -0.1, name: 'Frenzy (reckless)' }] },
+  rend: { id: 'rend', name: 'Rend', icon: 'claws', desc: 'Tears the target open; it bleeds for 12 seconds.', level: 5, kind: 'style', costType: 'endu', cost: 6, target: 'enemy', school: 'melee', bonus: 0.6, effects: [{ type: 'dot', dur: 12, value: 0.1 }] },
+  howl: { id: 'howl', name: 'Howl', icon: 'warcry', desc: 'A howl that chills the blood: enemies within 10 m slow by 40% for 6 seconds.', level: 9, kind: 'instant', costType: 'endu', cost: 10, cd: 30, radius: 10, target: 'pbaoe', school: 'melee', effects: [{ type: 'snare', dur: 6, value: 0.4 }] },
+  pounce: { id: 'pounce', name: 'Pounce', icon: 'pounce', desc: 'Leaps onto a target up to 20 m away and stuns it for 2 seconds.', level: 14, kind: 'instant', costType: 'endu', cost: 10, cd: 30, range: 20, target: 'enemy', school: 'melee', effects: [{ type: 'step', dur: 0 }, { type: 'stun', dur: 2 }] },
 
   // Monster abilities
   bog_bolt: { id: 'bog_bolt', name: 'bog bolt', icon: 'frost', desc: '', level: 1, kind: 'spell', costType: 'power', cost: 0, cast: 2.4, range: 28, target: 'enemy', school: 'cold', power: [5, 3.2], effects: [{ type: 'snare', dur: 5, value: 0.3 }] },

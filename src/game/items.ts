@@ -26,7 +26,7 @@ export const RARITY_NAMES = ['Common', 'Fine', 'Superior', 'Artifact'];
 export const RARITY_HEX = ['#e8e4da', '#5fd068', '#4aa3ff', '#c77dff'];
 
 const BASES: Record<Slot, Record<string, string[]>> = {
-  weapon: { sword: ['Arming Sword', 'Broadsword', 'Bastard Sword', 'Runeblade'], axe: ['Hand Axe', 'Bearded Axe', 'War Axe', 'Rune Axe'], bow: ['Hunting Bow', 'Longbow', 'Recurve Bow', 'Warbow'], staff: ['Oak Staff', 'Runed Staff', 'Spellstave', 'Archstaff'], mace: ['Cudgel', 'Flanged Mace', 'Morning Star', 'Sanctum Mace'] },
+  weapon: { sword: ['Arming Sword', 'Broadsword', 'Bastard Sword', 'Runeblade'], axe: ['Hand Axe', 'Bearded Axe', 'War Axe', 'Rune Axe'], dagger: ['Paired Knives', 'Stilettos', 'Main-gauches', 'Shadowfangs'], bow: ['Hunting Bow', 'Longbow', 'Recurve Bow', 'Warbow'], staff: ['Oak Staff', 'Runed Staff', 'Spellstave', 'Archstaff'], mace: ['Cudgel', 'Flanged Mace', 'Morning Star', 'Sanctum Mace'] },
   helm: { plate: ['Pot Helm', 'Great Helm'], chain: ['Coif', 'Mail Hood'], leather: ['Leather Cap', 'Ranger Hood'], cloth: ['Cowl', 'Circlet'] },
   chest: { plate: ['Breastplate', 'Cuirass'], chain: ['Hauberk', 'Mail Shirt'], leather: ['Jerkin', 'Brigandine'], cloth: ['Robe', 'Vestments'] },
   legs: { plate: ['Greaves', 'Cuisses'], chain: ['Chausses', 'Mail Leggings'], leather: ['Leggings', 'Breeches'], cloth: ['Trousers', 'Pantaloons'] },
@@ -45,6 +45,7 @@ const ROLE_STATS: Record<Role, Bonus[]> = {
   archer: ['dex', 'con', 'str', 'hp'],
   caster: ['int', 'dex', 'con', 'hp'],
   healer: ['pie', 'con', 'str', 'hp'],
+  stealther: ['dex', 'str', 'con', 'hp'],
 };
 
 let uidSeq = 1;

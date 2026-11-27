@@ -28,7 +28,7 @@ URL options: `?seed=N` builds a different world (default 7), `?fps` shows the fr
 
 **Realms.** Valmora (meadows and stone, blue), Eldwyn (deep forest, green) and Hroth (snow and fjords, red) each have a town, a home region walled off from the others by mountains, and a gate fortress onto the shared frontier in the middle.
 
-**Classes.** Each realm has its own four classes, one for each role:
+**Classes.** Each realm has its own five classes, one for each role:
 
 | Role | Valmora | Eldwyn | Hroth |
 |---|---|---|---|
@@ -36,8 +36,11 @@ URL options: `?seed=N` builds a different world (default 7), `?fps` shows the fr
 | Archer (long draws any hit ruins) | Yeoman: Archery, Hunting, Survival | Ranger: Archery, Hunting, Glamour (dazzles, illusions) | Hunter: Archery, Hunting, Survival |
 | Caster (hits hardest, interrupted by any blow) | Wizard: Fire, Frost, Storm | Mistweaver: Light, Void (drains), Mana | Runecarver: Runes, Frost, Darkness (drains, dread) |
 | Healer (heals, a stun, damage at range) | Cleric: Restoration, Smiting, Enhancement | Druid: Restoration, Nature, Enhancement | Seer: Restoration, Storm, Augury (haste, foresight) |
+| Stealther (hides, opens from behind, daggers) | Cutthroat: Daggers, Shadows, Poisons | Shade: Daggers, Shadows, Night (blind, veils) | Nightwolf: Daggers, Shadows, Savagery (frenzy, pounce) |
 
 **Specialization.** Each class has the three lines above. Each level brings 1.5 × that level in points; raising a line from n to n+1 costs n+1, and no line goes above your level. A line unlocks its abilities and sets their strength, so a level 20 hero can max one line and take another to 14, or spread out. Respec in the same window.
+
+**Stealth.** Stealthers can hide out of combat. A hidden enemy is invisible, off the minimap and untargetable until you come within its detect range: about 3.5 m at equal level, more if you out-level its Shadows line, and more again for other stealthers and keep guards. Attacking, casting or being hurt brings a stealther out; Ambush (from behind) and Garrote (a stun) only work from hiding, and Vanish hides even mid-fight.
 
 **Levelling (1–20).** Monster camps get tougher the farther they are from town, and every monster's name is coloured by how it compares to you (grey, green, blue, yellow, orange, red, purple). Wolves call their packmates, brigands fight in gangs, bog sprites and mistcallers cast, trolls and treants slam, a few named monsters roam with better loot, and you can die. The Taskmaster pays for culling monsters, the Merchant sells potions and gear of your level, and loot drops with up to three bonuses. Other heroes of your realm level in the same fields and chatter in region chat.
 

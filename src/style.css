@@ -40,7 +40,7 @@ em { color: #7dff9a; font-style: normal; }
 .realm small { color: var(--ink); opacity: 0.85; }
 .realm.on { outline: 2px solid var(--c); box-shadow: 0 0 24px color-mix(in srgb, var(--c) 50%, transparent); }
 .crest { width: 34px; height: 40px; background: var(--c); clip-path: polygon(0 0, 100% 0, 100% 62%, 50% 100%, 0 62%); border: 0; }
-.classes { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.classes { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
 .cls { display: flex; flex-direction: column; padding: 10px; text-align: left; }
 .cls b { font-family: Cinzel, Georgia, serif; font-size: 16px; }
 .cls.on { outline: 2px solid var(--gold2); }

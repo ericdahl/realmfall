@@ -263,3 +263,96 @@ describe('realm classes', () => {
     }
   });
 });
+
+describe('stealth', () => {
+  const setup = (cls: 'cutthroat' | 'shade' | 'nightwolf' = 'cutthroat', level = 12, build = 0) => {
+    const w = new World(30, { populate: false, headless: true });
+    const ch = World.newChar('Bot', CLASSES[cls].realm, cls, 30);
+    ch.level = level;
+    ch.specs = autoSpec(cls, level, BUILDS[cls][build]);
+    ch.x = -606; ch.z = 350;
+    const p = w.spawnPlayer(ch);
+    return { w, p };
+  };
+
+  it('a hidden hero is seen only up close, and attacking brings it out', () => {
+    const { w, p } = setup();
+    const m = w.makeMob(MOB_BY_ID.grey_wolf, 12, p.x + 20, p.z);
+    w.add(m);
+    expect(w.useAbility(p, 'stealth')).toBeNull();
+    expect(p.stealthed).toBe(true);
+    expect(w.canSee(m, p)).toBe(false);
+    const r = w.detectRange(m, p);
+    expect(r).toBeGreaterThan(1);
+    expect(r).toBeLessThan(8);
+    p.x = m.x - r + 0.2;
+    expect(w.canSee(m, p)).toBe(true);
+    p.x = m.x - r - 1;
+    w.damage(p, m, 3, 'melee', false, 'hit');
+    expect(p.stealthed).toBe(false);
+  });
+
+  it('monsters walk past a hidden hero, but not a visible one', () => {
+    const { w, p } = setup('shade');
+    const m = w.makeMob(MOB_BY_ID.grey_wolf, 12, p.x + 8, p.z);
+    w.add(m);
+    w.useAbility(p, 'stealth');
+    w.run(3);
+    expect(m.target).not.toBe(p.id);
+    w.unhide(p);
+    w.run(3);
+    expect(m.target).toBe(p.id);
+  });
+
+  it('no hiding mid-fight, but Vanish shakes off pursuers', () => {
+    const { w, p } = setup('cutthroat', 16, 1); // the Shadows build
+    expect(p.abilities).toContain('vanish');
+    const m = w.makeMob(MOB_BY_ID.dire_wolf, 16, p.x + 2, p.z);
+    w.add(m);
+    w.engage(m, p);
+    m.target = p.id;
+    m.threat.set(p.id, 50);
+    expect(w.useAbility(p, 'stealth')).toMatch(/fight/);
+    expect(w.useAbility(p, 'vanish')).toBeNull();
+    expect(p.stealthed).toBe(true);
+    expect(m.threat.has(p.id)).toBe(false);
+    expect(m.target).toBeNull();
+  });
+
+  it('Ambush needs hiding and the target’s back; poisons land with every hit', () => {
+    const { w, p } = setup('cutthroat', 12);
+    const m = w.makeMob(MOB_BY_ID.brigand, 12, p.x + 2, p.z);
+    w.add(m);
+    m.facing = 0; // facing +x, away from the hero at its back
+    expect(w.styleBlocked(p, m, ABILITIES.ambush)).toMatch(/hidden/);
+    w.useAbility(p, 'stealth');
+    expect(w.styleBlocked(p, m, ABILITIES.ambush)).toBeNull();
+    m.facing = Math.PI; // turns to face the hero
+    expect(w.styleBlocked(p, m, ABILITIES.ambush)).toMatch(/behind/);
+    m.facing = 0;
+    w.useAbility(p, 'deadly_poison');
+    expect(p.stealthed).toBe(true); // poisons don't break stealth
+    (w as any).defenseRoll = () => 'hit';
+    p.queuedStyle = 'ambush';
+    (w as any).swing(p, m, false);
+    expect(p.stealthed).toBe(false);
+    expect(w.events.some((ev) => ev.type === 'swing' && ev.style === 'ambush')).toBe(true);
+    expect(m.effects.some((f) => f.type === 'dot')).toBe(true);
+  });
+
+  it('computer stealthers sneak up and open from hiding', () => {
+    let opened = 0;
+    for (const cls of ['cutthroat', 'shade', 'nightwolf'] as const) {
+      const w = new World(40, { populate: false, headless: true });
+      const e = w.makeCombatant('adventurer', cls, CLASSES[cls].realm, 12, -606, 350, 'Sneak');
+      e.ai.mode = 'hunt';
+      w.add(e);
+      const m = w.makeMob(MOB_BY_ID.boar, 11, -606, 372);
+      w.add(m);
+      e.ai.huntId = m.id;
+      w.run(25);
+      if (w.events.some((ev) => ev.type === 'swing' && ev.id === e.id && (ev.style === 'ambush' || ev.style === 'garrote'))) opened++;
+    }
+    expect(opened).toBe(3);
+  });
+});

@@ -67,7 +67,7 @@ interface Look {
   body: string;
   trim: string;
   cape?: string;
-  weapon: 'sword' | 'axe' | 'bow' | 'staff' | 'mace' | 'none';
+  weapon: 'sword' | 'axe' | 'dagger' | 'bow' | 'staff' | 'mace' | 'none';
   shield: boolean;
   helm: 'none' | 'helm' | 'hood' | 'hat' | 'crown';
   skin: string;
@@ -94,7 +94,7 @@ function lookOf(e: Entity): Look {
   if (e.look?.body) body = e.look.body;
   const arch = CLASSES[cls].arch;
   // Eldwyn's casters and healers go hooded; everyone else's casters wear the pointed hat
-  let helm: Look['helm'] = arch === 'caster' ? (cls === 'mistweaver' ? 'hood' : 'hat') : arch === 'archer' || cls === 'druid' ? 'hood' : e.kind === 'guard' || e.kind === 'soldier' ? (arch === 'tank' ? 'helm' : 'none') : 'none';
+  let helm: Look['helm'] = arch === 'caster' ? (cls === 'mistweaver' ? 'hood' : 'hat') : arch === 'archer' || arch === 'stealther' || cls === 'druid' ? 'hood' : e.kind === 'guard' || e.kind === 'soldier' ? (arch === 'tank' ? 'helm' : 'none') : 'none';
   if (e.kind === 'lord') helm = 'crown';
   if (e.kind === 'npc') helm = 'none';
   if (e.look?.helm) helm = 'helm';
@@ -175,6 +175,12 @@ function humanoid(e: Entity): Rig {
     w.add(mesh(box(0.05, 0.92, 0.1, 0.62), mat('#d5dae0')));
     w.add(mesh(box(0.08, 0.06, 0.34, 0.15), mat('#8a6a2a')));
     w.add(mesh(box(0.06, 0.2, 0.06, 0.02), mat('#3a2a1e')));
+    w.rotation.z = -1.2;
+    hand.add(w);
+  } else if (L.weapon === 'dagger') {
+    const w = new THREE.Group();
+    w.add(mesh(box(0.04, 0.42, 0.08, 0.34), mat('#d5dae0')));
+    w.add(mesh(box(0.06, 0.04, 0.18, 0.12), mat('#3a2a1e')));
     w.rotation.z = -1.2;
     hand.add(w);
   } else if (L.weapon === 'axe') {

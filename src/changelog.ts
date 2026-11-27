@@ -7,6 +7,18 @@ export interface Release { version: string; date: string; title: string; notes: 
 
 export const CHANGELOG: Release[] = [
   {
+    version: '0.5.0',
+    date: '2026-11-27',
+    title: 'Stealth',
+    notes: [
+      'A fifth class for every realm, the stealther: the Cutthroat of Valmora, the Shade of Eldwyn and the Nightwolf of Hroth. All three fight with daggers and the Shadows line; the Cutthroat adds poisons, the Shade the night’s tricks, the Nightwolf savagery.',
+      'Stealth (out of combat) hides you. Enemies only see you once they are close: about three and a half metres at your level, farther if they out-level your Shadows line, and farther still for other stealthers and keep guards. You move more slowly while hidden, less so as Shadows rises.',
+      'Attacking, casting or being hurt brings you out of hiding. Open with Ambush from behind or Garrote to stun; Shadowstep puts you behind a target without giving you away, and Vanish hides you even mid-fight and makes your pursuers lose you.',
+      'Hidden enemies vanish from view, from the minimap and from targeting until you see them. You and hidden realm-mates show as shadows.',
+      'Other heroes and warbands now include stealthers, who sneak up and open from hiding.',
+    ],
+  },
+  {
     version: '0.4.0',
     date: '2026-11-27',
     title: 'A class for every realm',

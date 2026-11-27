@@ -7,7 +7,8 @@
 import { ABILITIES, type ClassId } from './data';
 
 /** What raising the line does besides unlocking abilities. */
-export type Passive = 'melee' | 'ranged' | 'parry' | 'block' | 'evade';
+/** stealth: how close an enemy must be to see you, and how fast you move hidden. */
+export type Passive = 'melee' | 'ranged' | 'parry' | 'block' | 'evade' | 'stealth';
 
 export interface LineDef {
   id: string;
@@ -23,6 +24,8 @@ const ARCHERY: LineDef = { id: 'archery', name: 'Archery', passive: 'ranged', de
 const HUNTING: LineDef = { id: 'hunting', name: 'Hunting', desc: 'Snares, pins and wounds that bleed.', abilities: ['crippling_arrow', 'quick_shot', 'pinning_shot', 'barbed_arrow'] };
 const SURVIVAL: LineDef = { id: 'survival', name: 'Survival', passive: 'evade', desc: 'Staying alive in the wild. Raises your chance to evade.', abilities: ['evasion', 'fleet_foot', 'second_wind', 'field_dressing'] };
 const FROST: LineDef = { id: 'frost', name: 'Frost', desc: 'Cold that slows and holds. Raises the power of frost spells.', abilities: ['frost_lance', 'ice_shard', 'frost_nova', 'hailstorm'] };
+const DAGGERS: LineDef = { id: 'daggers', name: 'Daggers', passive: 'melee', desc: 'Dagger styles. Raises the damage of every stab.', abilities: ['stab', 'twist', 'low_blow', 'eviscerate', 'fan_of_knives'] };
+const SHADOWS: LineDef = { id: 'shadows', name: 'Shadows', passive: 'stealth', desc: 'Hiding and opening from it. Enemies must come closer to see you, and you move faster hidden.', abilities: ['stealth', 'ambush', 'garrote', 'shadowstep', 'vanish'] };
 const RESTORATION: LineDef = { id: 'restoration', name: 'Restoration', desc: 'Healing. Raises the power of every heal.', abilities: ['mend', 'renew', 'greater_mend', 'sanctuary'] };
 const ENHANCEMENT: LineDef = { id: 'enhancement', name: 'Enhancement', desc: 'Blessings for you and your realm-mates.', abilities: ['blessing', 'ward_of_faith', 'resolve', 'shield_of_faith'] };
 
@@ -57,6 +60,10 @@ export const LINES: Record<ClassId, LineDef[]> = {
     FROST,
     { id: 'darkness', name: 'Darkness', desc: 'Drains, rot and dread. Raises the power of dark spells.', abilities: ['drain_life', 'wither', 'dread', 'soul_siphon'] },
   ],
+  // stealth
+  cutthroat: [DAGGERS, SHADOWS, { id: 'poisons', name: 'Poisons', desc: 'Poisons for your daggers, and smoke to vanish in.', abilities: ['deadly_poison', 'crippling_poison', 'numbing_poison', 'smoke_bomb'] }],
+  shade: [DAGGERS, SHADOWS, { id: 'night', name: 'Night', desc: 'The night’s own tricks: veils, blindness and moonlight.', abilities: ['night_veil', 'blind', 'moonblade', 'shadow_dance'] }],
+  nightwolf: [DAGGERS, SHADOWS, { id: 'savagery', name: 'Savagery', desc: 'Frenzy, rending and the pounce.', abilities: ['frenzy', 'rend', 'howl', 'pounce'] }],
   seer: [
     RESTORATION,
     { id: 'storm', name: 'Storm', desc: 'Lightning and winter wind. Raises the power of storm spells.', abilities: ['spark', 'gale', 'thunderstrike', 'lightning'] },
@@ -127,6 +134,9 @@ export const BUILDS: Record<ClassId, number[][]> = {
   cleric: [[1, 0, 0.7], [0.7, 1, 0], [1, 0.6, 0.4]],
   druid: [[1, 0, 0.7], [0.7, 1, 0], [1, 0.6, 0.4]],
   seer: [[1, 0, 0.7], [0.7, 1, 0], [1, 0.6, 0.4]],
+  cutthroat: [[1, 0.7, 0.5], [0.7, 1, 0.5]],
+  shade: [[1, 0.7, 0.5], [0.7, 1, 0.5]],
+  nightwolf: [[1, 0.7, 0.5], [1, 0.5, 0.7]],
 };
 
 /** Spends a level's points by a build: each line toward its share, the most wanted first. */

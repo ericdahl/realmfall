@@ -400,11 +400,12 @@ export class Hud {
     const buffs = $(el, '.buffs');
     const parts = e.effects.map((f) => {
       const left = Math.max(0, Math.ceil(f.until - w.t));
-      const good = (f.type === 'buff' && f.value >= 0) || f.type === 'hot' || f.type === 'absorb' || f.type === 'focus' || f.type === 'freedom' || f.type === 'thorns';
+      const good = (f.type === 'buff' && f.value >= 0) || f.type === 'hot' || f.type === 'absorb' || f.type === 'focus' || f.type === 'freedom' || f.type === 'thorns' || f.type === 'imbue';
       const label = f.type === 'snare' ? 'Slowed' : f.type === 'stun' ? 'Stunned' : f.type === 'root' ? 'Rooted' : f.type === 'dot' ? 'Bleeding' : f.type === 'taunt' ? 'Taunted' : f.type === 'focus' ? 'Focus' : f.name;
       return `<span class="${good ? 'good' : 'bad'}">${label} ${left > 99 ? Math.ceil(left / 60) + 'm' : left + 's'}</span>`;
     });
     if (self && e.sprinting) parts.unshift('<span class="good">Sprinting</span>');
+    if (self && e.stealthed) parts.unshift('<span class="good">Hidden</span>');
     if (self && e.attacking) parts.unshift('<span class="good">Attacking</span>');
     buffs.innerHTML = parts.join('');
   }
@@ -500,7 +501,7 @@ export class Hud {
       g.strokeRect(x - 5, y - 5, 10, 10);
     }
     w.near(p.x, p.z, span * 0.75, (e) => {
-      if (e === p || e.dead || e.kind === 'door') return;
+      if (e === p || e.dead || e.kind === 'door' || !w.canSee(p, e)) return;
       const [x, y] = toS(e.x, e.z);
       let col = '#ddd';
       if (e.kind === 'mob') col = CON_HEX[conColor(p.level, e.level)];

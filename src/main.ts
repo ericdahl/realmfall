@@ -74,7 +74,7 @@ function boot() {
   const nextTarget = () => {
     const p = world.player!;
     const cands: Entity[] = [];
-    world.near(p.x, p.z, 45, (o) => { if (world.hostile(p, o) && o.kind !== 'door') cands.push(o); });
+    world.near(p.x, p.z, 45, (o) => { if (world.hostile(p, o) && world.canSee(p, o) && o.kind !== 'door') cands.push(o); });
     if (!cands.length) {
       // a keep gate if that's all there is
       world.near(p.x, p.z, 25, (o) => { if (world.hostile(p, o)) cands.push(o); });
@@ -118,6 +118,7 @@ function boot() {
       const id = renderer.pick(x, y);
       if (id == null) return;
       const e = world.get(id)!;
+      if (!world.canSee(p, e)) return;
       p.target = id;
       if (button === 2) {
         if (e.kind === 'npc' && e.realm === p.realm && dist(p, e) < 8) panels.talk(e);
