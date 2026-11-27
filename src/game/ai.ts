@@ -8,7 +8,7 @@ const LEASH = 70;
 
 function validTarget(w: World, e: Entity): Entity | null {
   const t = w.get(e.target);
-  if (!t || t.dead || !w.hostile(e, t)) return null;
+  if (!t || t.dead || !w.hostile(e, t) || !w.canSee(e, t)) return null;
   return t;
 }
 
@@ -20,13 +20,13 @@ function topThreat(w: World, e: Entity): Entity | null {
       e.threat.delete(id);
       continue;
     }
-    if (dist(e, o) > 90) continue;
+    if (dist(e, o) > 90 || !w.canSee(e, o)) continue;
     if (v > bv) { bv = v; best = o; }
   }
   const taunt = e.effects.find((f) => f.type === 'taunt');
   if (taunt) {
     const t = w.get(taunt.src);
-    if (t && !t.dead) return t;
+    if (t && !t.dead && w.canSee(e, t)) return t;
   }
   return best;
 }
@@ -57,6 +57,24 @@ function fight(w: World, e: Entity, t: Entity, dt: number) {
 
   if (e.cast) {
     e.facing = angleTo(e, t);
+    return;
+  }
+
+  // Hidden: get behind the target and open with Ambush, Garrote or a plain Stab.
+  if (role === 'stealther' && e.stealthed) {
+    e.attacking = !!e.queuedStyle;
+    if (e.queuedStyle) return;
+    if (d > 12 && d < 25 && try_(w, e, 'shadowstep', t)) return;
+    const bx = t.x - Math.cos(t.facing) * (t.radius + e.radius + 0.9), bz = t.z - Math.sin(t.facing) * (t.radius + e.radius + 0.9);
+    const behind = !w.styleBlocked(e, t, ABILITIES.ambush);
+    const knows = (ab: string) => e.abilities.includes(ab);
+    if (d <= e.weapon.range && (behind || !knows('ambush'))) {
+      e.facing = angleTo(e, t);
+      e.queuedStyle = behind && knows('ambush') ? 'ambush' : knows('garrote') ? 'garrote' : 'stab';
+      e.attacking = true;
+      return;
+    }
+    w.moveToward(e, bx, bz, dt, 0.3);
     return;
   }
 
@@ -163,6 +181,30 @@ function fight(w: World, e: Entity, t: Entity, dt: number) {
       }
       break;
     }
+    case 'stealther': {
+      if (!e.effects.some((f) => f.type === 'imbue')) for (const ab of ['deadly_poison', 'crippling_poison']) if (try_(w, e, ab, e)) break;
+      if (e.hp < e.maxHp * 0.25 && try_(w, e, 'vanish', e)) return;
+      if (e.hp < e.maxHp * 0.6) try_(w, e, 'night_veil', e);
+      if (t.target === e.id) try_(w, e, 'blind', t);
+      try_(w, e, 'frenzy', e);
+      try_(w, e, 'shadow_dance', e);
+      if (countNear(w, e, e, 6) >= 3) {
+        for (const ab of ['fan_of_knives', 'howl']) try_(w, e, ab, t);
+        if (e.hp < e.maxHp * 0.5) try_(w, e, 'smoke_bomb', e);
+      }
+      if (d > 6) try_(w, e, 'pounce', t);
+      if (!e.queuedStyle && e.endu > 15) {
+        const knows = (ab: string) => e.abilities.includes(ab);
+        const last = e.lastStyle?.id;
+        if (last === 'twist' && knows('eviscerate')) e.queuedStyle = 'eviscerate';
+        else if (last === 'stab' && knows('twist')) e.queuedStyle = 'twist';
+        else if (knows('low_blow') && !w.styleBlocked(e, t, ABILITIES.low_blow)) e.queuedStyle = 'low_blow';
+        else if (!w.has(t, 'dot') && knows('rend')) e.queuedStyle = 'rend';
+        else if (!w.has(t, 'dot') && knows('moonblade')) e.queuedStyle = 'moonblade';
+        else e.queuedStyle = 'stab';
+      }
+      break;
+    }
     case 'healer': {
       if (t.cast) for (const ab of ['holy_stun', 'thunderstrike']) if (try_(w, e, ab, t)) return;
       if (d > 6 && e.power > e.maxPower * 0.4) {
@@ -258,7 +300,7 @@ export function thinkMob(w: World, e: Entity, dt: number) {
   // idle or wandering: look for trouble
   if (def.aggro > 0 && w.t >= ai.think) {
     ai.think = w.t + 0.4 + w.rng.next() * 0.4;
-    const t = w.nearest(e, def.aggro * (e.named ? 1.3 : 1), (o) => (o.kind === 'player' || o.kind === 'adventurer' || o.kind === 'soldier') && w.hostile(e, o) && conColor(o.level, e.level) !== 'grey');
+    const t = w.nearest(e, def.aggro * (e.named ? 1.3 : 1), (o) => (o.kind === 'player' || o.kind === 'adventurer' || o.kind === 'soldier') && w.hostile(e, o) && conColor(o.level, e.level) !== 'grey' && w.canSee(e, o));
     if (t) {
       e.target = t.id;
       e.threat.set(t.id, 1);
@@ -316,7 +358,7 @@ export function thinkCombatant(w: World, e: Entity, dt: number) {
     ai.think = w.t + 0.35 + w.rng.next() * 0.3;
     if (!t || (e.kind === 'soldier' && t.kind === 'door')) {
       const pred = (o: Entity) =>
-        w.hostile(e, o) && o.kind !== 'door' && (e.kind !== 'adventurer' || o.kind === 'mob') && (o.kind !== 'mob' || e.kind === 'guard' || e.kind === 'adventurer' || o.target != null);
+        w.hostile(e, o) && w.canSee(e, o) && o.kind !== 'door' && (e.kind !== 'adventurer' || o.kind === 'mob') && (o.kind !== 'mob' || e.kind === 'guard' || e.kind === 'adventurer' || o.target != null);
       const n = w.nearest(e, engage, pred);
       if (n) t = n;
     }
@@ -327,7 +369,7 @@ export function thinkCombatant(w: World, e: Entity, dt: number) {
     const p = b?.follow !== undefined ? w.get(b.follow) : undefined;
     if (p && !p.dead) {
       const pt = w.get(p.target);
-      if (pt && w.hostile(e, pt) && dist(p, pt) < 45 && (p.attacking || p.cast || pt.target === p.id || w.t - p.lastCombat < 4)) t = pt;
+      if (pt && w.hostile(e, pt) && w.canSee(e, pt) && dist(p, pt) < 45 && (p.attacking || p.cast || pt.target === p.id || w.t - p.lastCombat < 4)) t = pt;
     }
   }
   if (e.cls && CLASSES[e.cls].arch === 'healer' && !e.cast && w.t - e.lastCombat < 12 && healSomeone(w, e)) return;
@@ -343,6 +385,8 @@ export function thinkCombatant(w: World, e: Entity, dt: number) {
   }
 
   if (t) {
+    // stealthers slip into the shadows before they close in
+    if (e.cls && CLASSES[e.cls].arch === 'stealther' && !e.stealthed && t.target !== e.id && dist(e, t) > 8 && w.t - e.lastCombat > 6) try_(w, e, 'stealth', e);
     ai.mode = 'combat';
     fight(w, e, t, dt);
     return;
@@ -401,11 +445,12 @@ function adventure(w: World, e: Entity, dt: number) {
   if (prey) {
     const d = dist(e, prey);
     const arch = e.cls ? CLASSES[e.cls].arch : 'tank';
-    const reach = arch === 'caster' || arch === 'archer' ? 28 : arch === 'healer' ? 24 : 2.5;
+    const reach = arch === 'caster' || arch === 'archer' ? 28 : arch === 'healer' ? 24 : arch === 'stealther' ? 6 : 2.5;
+    if (arch === 'stealther' && !e.stealthed && d < 30 && w.t - e.lastCombat > 6) try_(w, e, 'stealth', e);
     if (d > reach) w.moveToward(e, prey.x, prey.z, dt, reach - 1);
     else {
       e.target = prey.id;
-      w.engage(e, prey);
+      if (!e.stealthed) w.engage(e, prey); // a hidden stealther opens with a style instead
       ai.mode = 'combat';
     }
     return;

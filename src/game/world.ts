@@ -363,6 +363,11 @@ export class World {
     this.t += dt;
     this.rebuildGrid();
     const p = this.player;
+    // a target that slips into the shadows is lost
+    if (p) {
+      const pt = this.get(p.target);
+      if (pt && !this.canSee(p, pt)) { p.target = null; p.attacking = false; }
+    }
     for (const e of this.list.slice()) {
       if (e.dead) {
         if (e.kind !== 'player' && e.kind !== 'door' && this.t - e.deadAt > (e.kind === 'mob' ? 24 : 16)) {
@@ -479,7 +484,11 @@ export class World {
     }
     if (e.cast) return 0;
     s *= 1 - snare;
-    if (e.sprinting) s *= SPRINT_SPEED;
+    if (e.stealthed) {
+      // slow in the shadows at first, nearly full speed with Shadows at your level
+      const f = e.cls && e.specs ? passiveFrac(e.cls, e.specs, e.level, 'stealth') ?? 1 : 1;
+      s *= 0.6 + 0.3 * f;
+    } else if (e.sprinting) s *= SPRINT_SPEED;
     if (this.geo.height(e.x, e.z) < -0.5) s *= 0.6;
     if (e.ai.mode === 'return') s *= 1.4;
     return s;
@@ -610,6 +619,29 @@ export class World {
       return;
     }
     if (def.type === 'thorns') name = 'Thorn Skin';
+    if (def.type === 'hide') {
+      if (e.stealthed) this.unhide(e);
+      else this.hide(e);
+      return;
+    }
+    if (def.type === 'vanish') {
+      this.hide(e);
+      for (const o of this.list) {
+        o.threat.delete(e.id);
+        if (o.target === e.id && o !== this.player) { o.target = null; o.attacking = false; }
+      }
+      return;
+    }
+    if (def.type === 'step') {
+      // src appears just behind e
+      src.x = e.x - Math.cos(e.facing) * (e.radius + 1.1);
+      src.z = e.z - Math.sin(e.facing) * (e.radius + 1.1);
+      src.y = this.geo.standY(src.x, src.z);
+      src.facing = angleTo(src, e);
+      this.plog(src, `You appear behind ${nm(e)}.`, 'spell');
+      return;
+    }
+    if (def.type === 'imbue') name = def.name;
     if (def.type === 'freedom') { name = 'Stand Fast'; e.effects = e.effects.filter((f) => f.type !== 'snare' && f.type !== 'root'); }
     if ((def.type === 'snare' || def.type === 'root') && this.has(e, 'freedom')) {
       this.plog(src, `${cap(e.name)} stands fast!`, 'error');
@@ -628,7 +660,7 @@ export class World {
     }
     // same effect from the same kind replaces
     const existing = e.effects.findIndex((f) => f.type === def.type && f.name === name);
-    const eff: Effect = { type: def.type, name, until: now + def.dur, start: now, value, stat, src: src.id, perTick, nextTick: now + 1 };
+    const eff: Effect = { type: def.type, name, until: now + def.dur, start: now, value, stat, src: src.id, perTick, nextTick: now + 1, proc: def.type === 'imbue' ? def.proc : undefined };
     if (existing >= 0) e.effects[existing] = eff;
     else e.effects.push(eff);
     if (def.type === 'taunt') {
@@ -638,7 +670,7 @@ export class World {
     if (def.type === 'stun') { this.plog(e, 'You are stunned!', 'hit-in'); this.plog(src, `${cap(e.name)} is stunned!`, 'spell'); }
     if (def.type === 'root') { this.plog(e, 'You are rooted to the ground!', 'hit-in'); this.plog(src, `${cap(e.name)} is rooted!`, 'spell'); }
     if (def.type === 'snare') this.plog(src, `${cap(e.name)} slows down!`, 'spell');
-    if (def.type === 'buff' || def.type === 'absorb' || def.type === 'hot' || def.type === 'freedom' || def.type === 'thorns') this.events.push({ type: 'buff', id: e.id, name });
+    if (def.type === 'buff' || def.type === 'absorb' || def.type === 'hot' || def.type === 'freedom' || def.type === 'thorns' || def.type === 'imbue') this.events.push({ type: 'buff', id: e.id, name });
   }
 
   private updateEffects(e: Entity) {
@@ -658,7 +690,7 @@ export class World {
           const im = ((e as Entity & { immune?: Record<string, number> }).immune ??= {});
           im[f.type] = now + (f.type === 'stun' ? 8 : 12);
         }
-        if (e === this.player && (f.type === 'buff' || f.type === 'absorb' || f.type === 'freedom' || f.type === 'thorns')) this.log(`${f.name} fades.`, 'spell');
+        if (e === this.player && (f.type === 'buff' || f.type === 'absorb' || f.type === 'freedom' || f.type === 'thorns' || f.type === 'imbue')) this.log(`${f.name} fades.`, 'spell');
       }
     }
   }
@@ -687,6 +719,7 @@ export class World {
       if (e === this.player && t?.dead) e.attacking = false;
       return;
     }
+    if (!this.canSee(e, t)) return;
     const d = dist(e, t) - t.radius - e.radius;
     const w = e.weapon;
     let ranged = w.ranged;
@@ -716,6 +749,7 @@ export class World {
       else if (a.endu < s.cost) this.plog(a, 'You are too fatigued to perform that style!', 'error');
       else style = s;
     }
+    if (a.stealthed) this.unhide(a);
     this.events.push({ type: 'swing', id: a.id, target: d.id, style: style?.id });
     if (ranged) this.events.push({ type: 'projectile', from: a.id, to: d.id, school: 'arrow' });
     this.engage(a, d);
@@ -746,6 +780,7 @@ export class World {
     this.damage(d, a, amount, ranged ? 'arrow' : 'melee', crit, 'hit');
     if (!ranged) this.thorns(d, a, amount);
     if (style?.effects) for (const f of style.effects) this.addEffect(d, a, f, amount);
+    if (!ranged) for (const f of a.effects) if (f.type === 'imbue' && f.proc && !d.dead) this.addEffect(d, a, f.proc, amount);
   }
 
   styleBlocked(a: Entity, d: Entity, s: AbilityDef): string | null {
@@ -753,11 +788,51 @@ export class World {
     if (!r) return null;
     if (r.follow && (!a.lastStyle || a.lastStyle.id !== r.follow)) return `You must perform ${ABILITIES[r.follow].name} first!`;
     if (r.after && (!a.lastDefense || a.lastDefense.kind !== r.after || this.t - a.lastDefense.t > 5)) return `You must ${r.after} first!`;
+    if (r.stealth && !a.stealthed) return 'You must be hidden to do that!';
     if (r.pos) {
       const behind = Math.abs(angDiff(angleTo(d, a), d.facing));
-      if (behind < Math.PI / 3 && d.target === a.id) return 'You must be beside or behind your target!';
+      if (r.pos === 'behind') {
+        if (behind < 2) return 'You must be behind your target!';
+      } else if (behind < Math.PI / 3 && d.target === a.id) return 'You must be beside or behind your target!';
     }
     return null;
+  }
+
+  // ---------- stealth ----------
+
+  /** How well a stealther hides: its Shadows line, never above its level. */
+  stealthLevel(e: Entity) {
+    return Math.min(e.level, e.specs?.shadows ?? e.level);
+  }
+
+  /** How close the viewer must come to see a hidden enemy. */
+  detectRange(viewer: Entity, e: Entity) {
+    let r = 3.5 + (viewer.level - this.stealthLevel(e)) * 0.3;
+    if (viewer.cls && CLASSES[viewer.cls].arch === 'stealther') r += 3; // it takes one to know one
+    if (viewer.kind === 'guard' || viewer.kind === 'lord') r += 3;
+    return clamp(r, 1.5, 12);
+  }
+
+  /** Can the viewer see this entity? Friends and anyone not hiding are always seen. */
+  canSee(viewer: Entity, e: Entity) {
+    if (!e.stealthed || viewer === e || !this.hostile(viewer, e)) return true;
+    return dist(viewer, e) <= this.detectRange(viewer, e);
+  }
+
+  hide(e: Entity) {
+    e.stealthed = true;
+    e.attacking = false;
+    e.sprinting = false;
+    e.queuedStyle = null;
+    if (e.cast) this.interrupt(e, 'You stop casting.');
+    this.plog(e, 'You are now hidden.', 'spell');
+    this.events.push({ type: 'buff', id: e.id, name: 'Stealth' });
+  }
+
+  unhide(e: Entity) {
+    if (!e.stealthed) return;
+    e.stealthed = false;
+    this.plog(e, 'You are no longer hidden.', 'spell');
   }
 
   /** Thorn Skin: part of a melee hit comes back on the attacker. */
@@ -867,6 +942,7 @@ export class World {
       if (d === this.player && soak > 0) this.log(`Your ward absorbs ${soak} damage.`, 'spell');
       if (amount <= 0) return;
     }
+    if (d.stealthed) this.unhide(d);
     d.hp -= amount;
     d.lastHurt = this.t;
     d.lastCombat = this.t;
@@ -931,6 +1007,8 @@ export class World {
     if ((e.cds[abId] ?? 0) > this.t) return `You must wait ${Math.ceil(e.cds[abId] - this.t)} seconds to use ${ab.name} again!`;
     if (e.cast) return 'You are already busy!';
     if (ab.costType === 'endu' && e.endu < ab.cost) return 'You are too fatigued!';
+    if (abId === 'stealth' && !e.stealthed && this.t - e.lastCombat < 5) return 'You can’t hide in the middle of a fight!';
+    if (target && target !== e && this.hostile(e, target) && !this.canSee(e, target)) return 'You can’t see your target!';
     if (ab.costType === 'power' && e.maxPower > 0 && e.power < (ab.cost / 100) * e.maxPower) return 'You don’t have enough power!';
     if (ab.target === 'enemy' || ab.target === 'enemyAoe') {
       if (!target || target.dead) return 'You need a target!';
@@ -956,6 +1034,7 @@ export class World {
       this.plog(e, why, 'error');
       return why;
     }
+    if (e.stealthed && !ab.keepsHidden && ab.kind !== 'style') this.unhide(e);
     if (target && target !== e && (ab.target === 'enemy' || ab.target === 'enemyAoe' || ab.target === 'ally')) {
       if (e !== this.player || Math.hypot(this.input.mx, this.input.mz) < 0.01) e.facing = angleTo(e, target);
     }
@@ -1050,7 +1129,7 @@ export class World {
       return;
     }
     for (const v of victims) {
-      this.engage(e, v);
+      if (!ab.keepsHidden) this.engage(e, v); // a Shadowstep doesn't alert its target
       if (ab.school !== 'melee' && ab.school !== 'ranged') this.events.push({ type: 'projectile', from: e.id, to: v.id, school: ab.school });
       else if (ab.school === 'ranged' && ab.target === 'enemy') this.events.push({ type: 'projectile', from: e.id, to: v.id, school: 'arrow' });
       let amount = 0, crit = false;

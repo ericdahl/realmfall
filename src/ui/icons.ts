@@ -135,6 +135,24 @@ function draw(g: CanvasRenderingContext2D, key: string) {
     case 'siphon': draw(g, 'drain'); g.lineWidth = 2; circle(g, 32, 32, 27); break;
     case 'swarm': for (const [x, y] of [[20, 20], [36, 16], [46, 30], [28, 34], [16, 44], [40, 46], [50, 50], [24, 52]]) { circle(g, x, y, 3, true); g.lineWidth = 1.5; line(g, [x - 4, y - 3, x + 4, y - 3]); } break;
     case 'haste': g.beginPath(); g.moveTo(38, 8); g.lineTo(20, 34); g.lineTo(32, 34); g.lineTo(26, 56); g.lineTo(46, 28); g.lineTo(34, 28); g.closePath(); g.fill(); g.lineWidth = 3; line(g, [6, 22, 16, 22]); line(g, [4, 34, 14, 34]); line(g, [6, 46, 16, 46]); break;
+    // stealth
+    case 'dagger': g.beginPath(); g.moveTo(48, 12); g.lineTo(52, 16); g.lineTo(28, 40); g.lineTo(24, 36); g.closePath(); g.fill(); line(g, [20, 32, 32, 44]); line(g, [24, 40, 14, 50]); break;
+    case 'fan': for (const a of [-0.6, -0.2, 0.2, 0.6]) { g.save(); g.translate(32, 50); g.rotate(a); g.beginPath(); g.moveTo(0, -38); g.lineTo(4, -20); g.lineTo(-4, -20); g.closePath(); g.fill(); g.restore(); } circle(g, 32, 50, 4, true); break;
+    case 'cloak': g.beginPath(); g.moveTo(32, 8); g.quadraticCurveTo(14, 16, 12, 56); g.lineTo(52, 56); g.quadraticCurveTo(50, 16, 32, 8); g.fill(); g.fillStyle = '#120c18'; g.beginPath(); g.ellipse(32, 24, 7, 9, 0, 0, Math.PI * 2); g.fill(); break;
+    case 'ambush': draw(g, 'dagger'); g.lineWidth = 2; g.setLineDash([4, 4]); circle(g, 32, 32, 26); g.setLineDash([]); break;
+    case 'garrote': g.lineWidth = 3; g.beginPath(); g.arc(32, 30, 14, 0.3, Math.PI - 0.3, true); g.stroke(); line(g, [20, 38, 10, 54]); line(g, [44, 38, 54, 54]); g.fillRect(6, 52, 8, 6); g.fillRect(50, 52, 8, 6); break;
+    case 'step': g.globalAlpha = 0.4; circle(g, 18, 40, 7, true); g.globalAlpha = 0.7; circle(g, 30, 32, 7, true); g.globalAlpha = 1; circle(g, 44, 24, 8, true); break;
+    case 'vanish': draw(g, 'cloak'); g.strokeStyle = '#f3e6c4'; g.lineWidth = 2; for (const [x, y] of [[8, 12], [56, 18], [10, 40], [54, 46]]) { line(g, [x - 3, y, x + 3, y]); line(g, [x, y - 3, x, y + 3]); } break;
+    case 'vial': case 'vial2': case 'vial3': {
+      g.beginPath(); g.moveTo(26, 8); g.lineTo(38, 8); g.lineTo(38, 24); g.lineTo(48, 50); g.quadraticCurveTo(32, 60, 16, 50); g.lineTo(26, 24); g.closePath(); g.stroke();
+      g.fillStyle = key === 'vial' ? '#6ad84a' : key === 'vial2' ? '#4ab0d8' : '#c8a0ff';
+      g.beginPath(); g.moveTo(21, 38); g.lineTo(43, 38); g.lineTo(48, 50); g.quadraticCurveTo(32, 60, 16, 50); g.closePath(); g.fill(); break;
+    }
+    case 'smoke': g.globalAlpha = 0.85; for (const [x, y, r] of [[22, 40, 12], [38, 36, 14], [30, 24, 11], [44, 22, 8]]) circle(g, x, y, r, true); g.globalAlpha = 1; break;
+    case 'moon': g.beginPath(); g.arc(32, 32, 20, 0, Math.PI * 2); g.fill(); g.fillStyle = '#100a1c'; g.beginPath(); g.arc(42, 26, 18, 0, Math.PI * 2); g.fill(); break;
+    case 'moonblade': draw(g, 'dagger'); g.lineWidth = 2; g.beginPath(); g.arc(46, 20, 10, 2, 5); g.stroke(); break;
+    case 'claws': g.lineWidth = 4; for (const o of [-12, 0, 12]) { g.beginPath(); g.moveTo(22 + o, 10); g.quadraticCurveTo(40 + o, 30, 26 + o, 56); g.stroke(); } break;
+    case 'pounce': draw(g, 'claws'); g.lineWidth = 2; g.beginPath(); g.arc(32, 46, 22, Math.PI * 1.1, Math.PI * 1.9); g.stroke(); break;
     default: circle(g, 32, 32, 14);
   }
 }

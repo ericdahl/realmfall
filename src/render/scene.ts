@@ -17,6 +17,21 @@ interface View {
   facing: number;
   plate?: THREE.Sprite;
   plateKey?: string;
+  /** drawn as a shadow: hidden, but seen by us */
+  ghost?: boolean;
+}
+
+/** One shared shadowy material for anyone hidden whom we can still see. */
+const GHOST = new THREE.MeshLambertMaterial({ color: '#2a2438', transparent: true, opacity: 0.38, depthWrite: false });
+
+function setGhost(v: View, on: boolean) {
+  if (!!v.ghost === on) return;
+  v.ghost = on;
+  v.rig.root.traverse((o) => {
+    const m = o as THREE.Mesh;
+    if (!m.isMesh) return;
+    if (on) { m.userData.mat = m.material; m.material = GHOST; } else if (m.userData.mat) m.material = m.userData.mat;
+  });
 }
 
 interface Fx { obj: THREE.Object3D; t: number; dur: number; update: (f: Fx, k: number) => void; dispose?: () => void }
@@ -352,10 +367,12 @@ export class Renderer {
       v.rig.root.rotation.y = -v.facing;
       const moved = Math.hypot(v.pos.x - before.x, v.pos.z - before.z);
       if (d2 < 110 * 110 || e === p) animate(v.rig, e, dt, moved, now);
-      v.rig.root.visible = !(e === p && this.hidePlayer);
+      const unseen = !!p && !!e.stealthed && !w.canSee(p, e);
+      v.rig.root.visible = !(e === p && this.hidePlayer) && !unseen;
+      setGhost(v, !!e.stealthed && !unseen);
       // nameplates
       const near = d2 < 45 * 45 || e === tgt;
-      const info = near && e !== p ? this.plateInfo(e) : null;
+      const info = near && e !== p && !unseen ? this.plateInfo(e) : null;
       if (info && info.show && !e.dead) {
         const key = `${info.text}|${info.sub}|${info.color}`;
         if (v.plateKey !== key) {
@@ -437,7 +454,7 @@ export class Renderer {
     let best: number | null = null, bd = 1e9;
     const v3 = new THREE.Vector3();
     for (const v of this.views.values()) {
-      if (v.e === this.w.player) continue;
+      if (v.e === this.w.player || (this.w.player && !this.w.canSee(this.w.player, v.e))) continue;
       const camD = v.pos.distanceTo(this.camera.position);
       if (camD > 150) continue;
       for (const f of [0.2, 0.5, 0.85]) {

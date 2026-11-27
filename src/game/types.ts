@@ -1,5 +1,5 @@
 import type { RealmId } from './geo';
-import type { BuffStat, ClassId, MobDef, StatId, WeaponKind } from './data';
+import type { BuffStat, ClassId, EffectDef, MobDef, StatId, WeaponKind } from './data';
 import type { Specs } from './specs';
 import type { Item, Slot } from './items';
 
@@ -8,7 +8,7 @@ export type Kind = 'player' | 'mob' | 'soldier' | 'guard' | 'lord' | 'door' | 'n
 export type NpcRole = 'merchant' | 'teleporter' | 'healer' | 'taskmaster' | 'gatekeeper';
 
 export interface Effect {
-  type: 'stun' | 'root' | 'snare' | 'dot' | 'hot' | 'buff' | 'absorb' | 'focus' | 'taunt' | 'freedom' | 'thorns';
+  type: 'stun' | 'root' | 'snare' | 'dot' | 'hot' | 'buff' | 'absorb' | 'focus' | 'taunt' | 'freedom' | 'thorns' | 'imbue';
   name: string;
   until: number;
   start: number;
@@ -17,6 +17,8 @@ export interface Effect {
   src: number;
   nextTick?: number;
   perTick?: number;
+  /** imbue: what each melee hit lands on the target */
+  proc?: EffectDef;
 }
 
 export interface Weapon {
@@ -101,6 +103,8 @@ export interface Entity {
   warband?: number;
   respawn?: number; // seconds until a mob respawns after death (mobs only)
   sprinting: boolean;
+  /** in the shadows: hostiles only see it within their detect range */
+  stealthed?: boolean;
   invulnerable?: boolean;
   look?: { body: string; trim: string; weapon?: string; helm?: boolean; bones?: boolean };
   title?: string;

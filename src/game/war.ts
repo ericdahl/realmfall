@@ -1,6 +1,6 @@
 /** The realm war: keeps, their garrisons, and the warbands each realm sends out to take them. */
 import { REALM_DEFS, siteById, KEEP_HALF, type RealmId, type Site } from './geo';
-import { ROLES, MOB_BY_ID, armorAf, realmName, classFor, type Role, type MobDef } from './data';
+import { ALL_ROLES, MOB_BY_ID, armorAf, realmName, classFor, type Role, type MobDef } from './data';
 import type { Entity, Team } from './types';
 import { dist, angleTo, type World } from './world';
 import { Rng } from './rng';
@@ -353,7 +353,7 @@ export class War {
     const n = size ?? this.rng.int(6, 9);
     const rr = () => this.rng.next();
     for (let i = 0; i < n; i++) {
-      const cls = classFor(realm, i === 0 ? 'tank' : this.rng.weighted(ROLES, (c) => (c === 'tank' ? 0.32 : c === 'healer' ? 0.26 : 0.21)));
+      const cls = classFor(realm, i === 0 ? 'tank' : this.rng.weighted(ALL_ROLES, (c) => (c === 'tank' ? 0.3 : c === 'healer' ? 0.24 : c === 'stealther' ? 0.12 : 0.19)));
       const x = g.x + Math.cos(g.facing) * (12 + this.rng.range(0, 8)) + this.rng.range(-5, 5);
       const z = g.z + Math.sin(g.facing) * (12 + this.rng.range(0, 8)) + this.rng.range(-5, 5);
       const e = w.makeCombatant('soldier', cls, realm, this.rng.int(16, 20), x, z, realmName(realm, rr));
