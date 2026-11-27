@@ -1,5 +1,5 @@
 /** How monsters, soldiers, guards and wandering adventurers decide what to do. */
-import { ABILITIES, conColor } from './data';
+import { ABILITIES, CLASSES, conColor } from './data';
 import { siteById, homeLevel, FRONTIER_R } from './geo';
 import type { Entity } from './types';
 import { dist, angleTo, type World } from './world';
@@ -44,14 +44,14 @@ function fight(w: World, e: Entity, t: Entity, dt: number) {
   e.target = t.id;
   e.attacking = true;
   const d = dist(e, t) - t.radius - e.radius;
-  const cls = e.cls;
+  const role = e.cls ? CLASSES[e.cls].arch : null;
   const mob = e.mob;
-  const caster = cls === 'runecaller' || mob?.caster;
-  const archer = cls === 'ranger' || mob?.ranged;
+  const caster = role === 'caster' || mob?.caster;
+  const archer = role === 'archer' || mob?.ranged;
   const wantRange = caster ? 26 : archer ? 24 : e.weapon.range - 0.3;
 
-  // Healing comes first for clerics.
-  if (cls === 'cleric' && !e.cast) {
+  // Healing comes first for healers.
+  if (role === 'healer' && !e.cast) {
     if (healSomeone(w, e)) return;
   }
 
@@ -62,9 +62,8 @@ function fight(w: World, e: Entity, t: Entity, dt: number) {
 
   // Kiting: casters push away from melee once they have rooted it.
   if (caster && d < 7 && !mob) {
-    if (try_(w, e, 'frost_nova')) return;
-    if (try_(w, e, 'flame_ring')) return;
-    if (!w.has(t, 'root') && try_(w, e, 'root', t)) return;
+    for (const ab of ['frost_nova', 'sunflare', 'flame_ring', 'rune_blast']) if (try_(w, e, ab)) return;
+    if (!w.has(t, 'root')) for (const ab of ['root', 'mana_bind', 'binding_rune']) if (try_(w, e, ab, t)) return;
     if (w.has(t, 'root') || w.has(t, 'snare')) {
       const a = angleTo(t, e);
       w.moveToward(e, e.x + Math.cos(a) * 10, e.z + Math.sin(a) * 10, dt);
@@ -76,7 +75,8 @@ function fight(w: World, e: Entity, t: Entity, dt: number) {
     const stop = (caster || archer ? wantRange : e.weapon.range - 0.5) + t.radius + e.radius;
     w.moveToward(e, t.x, t.z, dt, stop * 0.95);
     // instants while closing
-    if (cls === 'ranger' && d < 40) try_(w, e, 'quick_shot', t);
+    if (role === 'archer' && d < 40) try_(w, e, 'quick_shot', t);
+    if (role === 'tank' && d > 8 && d < 20 && t.target !== e.id) try_(w, e, 'entangle', t);
     return;
   }
   e.facing = angleTo(e, t);
@@ -96,33 +96,46 @@ function fight(w: World, e: Entity, t: Entity, dt: number) {
     return;
   }
 
-  switch (cls) {
-    case 'warden': {
+  switch (role) {
+    case 'tank': {
       if (t.cast && try_(w, e, 'shield_bash', t)) return;
       if (e.hp < e.maxHp * 0.5) try_(w, e, 'rally', e);
       if (e.hp < e.maxHp * 0.35) try_(w, e, 'bulwark', e);
+      if (e.hp > e.maxHp * 0.6) try_(w, e, 'berserk', e);
+      if (t.target === e.id) try_(w, e, 'thorn_skin', e);
+      if (countAllies(w, e, 15) >= 3) try_(w, e, 'war_cry', e);
       if (e.endu < 25) try_(w, e, 'second_wind', e);
       if ((w.has(e, 'snare') || w.has(e, 'root')) && d > 4) try_(w, e, 'stand_fast', e);
-      if (countNear(w, e, e, 5) >= 3) try_(w, e, 'sweeping_blow', t);
+      if (countNear(w, e, e, 6) >= 3) {
+        for (const ab of ['sweeping_blow', 'whirling_axe']) try_(w, e, ab, t);
+        if (!w.has(t, 'snare')) try_(w, e, 'briar_patch', e);
+      }
       if (!e.queuedStyle && e.endu > 20) {
         const ld = e.lastDefense;
-        if (ld && ld.kind === 'parry' && w.t - ld.t < 4 && e.abilities.includes('riposte')) e.queuedStyle = 'riposte';
-        else if (ld && ld.kind === 'block' && w.t - ld.t < 4 && e.abilities.includes('shield_slam')) e.queuedStyle = 'shield_slam';
-        else if (e.lastStyle?.id === 'backhand' && e.abilities.includes('executioner')) e.queuedStyle = 'executioner';
-        else if (e.lastStyle?.id === 'slash' && e.abilities.includes('backhand')) e.queuedStyle = 'backhand';
-        else e.queuedStyle = 'slash';
+        const knows = (ab: string) => e.abilities.includes(ab);
+        const last = e.lastStyle?.id;
+        if (ld && ld.kind === 'parry' && w.t - ld.t < 4 && knows('riposte')) e.queuedStyle = 'riposte';
+        else if (ld && ld.kind === 'block' && w.t - ld.t < 4 && knows('shield_slam')) e.queuedStyle = 'shield_slam';
+        else if (last === 'backhand' && knows('executioner')) e.queuedStyle = 'executioner';
+        else if (last === 'slash' && knows('backhand')) e.queuedStyle = 'backhand';
+        else if (last === 'gash' && knows('skullsplitter')) e.queuedStyle = 'skullsplitter';
+        else if (last === 'cleave' && knows('gash')) e.queuedStyle = 'gash';
+        else e.queuedStyle = knows('slash') ? 'slash' : 'cleave';
       }
       break;
     }
-    case 'ranger': {
+    case 'archer': {
       if (d < 5) {
         try_(w, e, 'quick_shot', t);
+        try_(w, e, 'dazzle', t);
         if (e.hp < e.maxHp * 0.6) try_(w, e, 'evasion', e);
+        if (e.hp < e.maxHp * 0.5) try_(w, e, 'shimmer', e);
         if (e.hp < e.maxHp * 0.4) try_(w, e, 'fleet_foot', e);
         return; // melee with the dagger
       }
       if (e.hp < e.maxHp * 0.5 && t.target !== e.id) try_(w, e, 'field_dressing', e);
       if (e.endu < 25) try_(w, e, 'second_wind', e);
+      if (t.target === e.id && t.weapon.range > 6) try_(w, e, 'dazzle', t);
       if (!w.has(t, 'snare') && !w.has(t, 'root') && t.weapon.range < 6 && t.target === e.id && d < 16 && try_(w, e, 'pinning_shot', t)) return;
       if (!w.has(t, 'snare') && t.weapon.range < 6 && try_(w, e, 'crippling_arrow', t)) return;
       if (!w.has(t, 'dot') && w.rng.chance(0.3) && try_(w, e, 'barbed_arrow', t)) return;
@@ -133,27 +146,42 @@ function fight(w: World, e: Entity, t: Entity, dt: number) {
       try_(w, e, 'aimed_shot', t);
       break;
     }
-    case 'runecaller': {
+    case 'caster': {
       if (e.power < e.maxPower * 0.1) return; // melee with the staff
-      if (e.hp < e.maxHp * 0.6) try_(w, e, 'arcane_shield', e);
-      if (countNear(w, e, t, 9) >= 3 && (try_(w, e, 'meteor', t) || try_(w, e, 'hailstorm', t))) return;
-      if (!w.has(t, 'snare') && t.weapon.range < 6 && try_(w, e, 'frost_lance', t)) return;
-      if (!w.has(t, 'dot') && try_(w, e, 'immolate', t)) return;
-      if (w.rng.chance(0.5) && try_(w, e, 'lightning', t)) return;
-      // the main nuke of whichever line is higher
-      const frosty = (e.specs?.frost ?? 1) > (e.specs?.fire ?? 1);
-      for (const ab of frosty ? ['ice_shard', 'frost_lance', 'fire_bolt'] : ['fire_bolt', 'ice_shard']) if (try_(w, e, ab, t)) return;
+      if (e.hp < e.maxHp * 0.6) for (const ab of ['arcane_shield', 'mana_ward']) if (try_(w, e, ab, e)) break;
+      if (t.cast && try_(w, e, 'dread', t)) return;
+      if (countNear(w, e, t, 9) >= 3) for (const ab of AOE_NUKES) if (try_(w, e, ab, t)) return;
+      if (!w.has(t, 'snare') && t.weapon.range < 6) for (const ab of ['frost_lance', 'void_bolt']) if (try_(w, e, ab, t)) return;
+      if (!w.has(t, 'dot')) for (const ab of ['immolate', 'entropy', 'wither']) if (try_(w, e, ab, t)) return;
+      if (e.hp < e.maxHp * 0.7) for (const ab of ['soul_siphon', 'unmaking', 'drain_life']) if (try_(w, e, ab, t)) return;
+      try_(w, e, 'arcane_surge', e);
+      // nukes from the highest line first; the slow ones half the time
+      const nukes = NUKES.filter((ab) => e.abilities.includes(ab)).sort((x, y) => w.powerLevel(e, ABILITIES[y]) - w.powerLevel(e, ABILITIES[x]));
+      for (const ab of nukes) {
+        if ((ABILITIES[ab].cast ?? 0) > 3 && w.rng.chance(0.5)) continue;
+        if (try_(w, e, ab, t)) return;
+      }
       break;
     }
-    case 'cleric': {
-      if (t.cast && try_(w, e, 'holy_stun', t)) return;
+    case 'healer': {
+      if (t.cast) for (const ab of ['holy_stun', 'thunderstrike']) if (try_(w, e, ab, t)) return;
       if (d > 6 && e.power > e.maxPower * 0.4) {
-        if (!w.has(t, 'dot') && try_(w, e, 'holy_fire', t)) return;
-        try_(w, e, 'smite', t);
+        if (!w.has(t, 'snare') && t.weapon.range < 6 && t.target === e.id && try_(w, e, 'gale', t)) return;
+        if (!w.has(t, 'dot')) for (const ab of ['holy_fire', 'swarm']) if (try_(w, e, ab, t)) return;
+        for (const ab of ['smite', 'sting', 'spark']) if (try_(w, e, ab, t)) return;
       }
       break;
     }
   }
+}
+
+const AOE_NUKES = ['meteor', 'dawnstrike', 'great_rune', 'hailstorm'];
+const NUKES = ['lightning', 'radiant_lance', 'oblivion', 'fire_bolt', 'light_bolt', 'rune_bolt', 'ice_shard', 'void_bolt', 'drain_life', 'frost_lance'];
+
+function countAllies(w: World, e: Entity, r: number) {
+  let n = 0;
+  w.near(e.x, e.z, r, (o) => { if (o !== e && w.friendly(e, o)) n++; });
+  return n;
 }
 
 function countNear(w: World, e: Entity, t: Entity, r: number) {
@@ -173,7 +201,7 @@ function healSomeone(w: World, e: Entity): boolean {
   });
   if (!best) return false;
   const tgt: Entity = best;
-  if (tgt.hp / tgt.maxHp < 0.35 && !w.has(tgt, 'absorb') && try_(w, e, 'shield_of_faith', tgt)) return true;
+  if (tgt.hp / tgt.maxHp < 0.35 && !w.has(tgt, 'absorb')) for (const ab of ['shield_of_faith', 'fates_ward']) if (try_(w, e, ab, tgt)) return true;
   if (!w.has(tgt, 'hot') && try_(w, e, 'renew', tgt)) return true;
   if (countHurt(w, e) >= 3 && try_(w, e, 'sanctuary', e)) return true;
   if (tgt.hp / tgt.maxHp < 0.4 && try_(w, e, 'greater_mend', tgt)) return true;
@@ -302,7 +330,7 @@ export function thinkCombatant(w: World, e: Entity, dt: number) {
       if (pt && w.hostile(e, pt) && dist(p, pt) < 45 && (p.attacking || p.cast || pt.target === p.id || w.t - p.lastCombat < 4)) t = pt;
     }
   }
-  if (e.cls === 'cleric' && !e.cast && w.t - e.lastCombat < 12 && healSomeone(w, e)) return;
+  if (e.cls && CLASSES[e.cls].arch === 'healer' && !e.cast && w.t - e.lastCombat < 12 && healSomeone(w, e)) return;
 
   // Posts and leashes.
   const anchor = e.ai.post ?? (e.kind === 'soldier' ? w.war.anchorOf(e) : null);
@@ -372,7 +400,8 @@ function adventure(w: World, e: Entity, dt: number) {
   prey = w.get(ai.huntId);
   if (prey) {
     const d = dist(e, prey);
-    const reach = e.cls === 'runecaller' || e.cls === 'ranger' ? 28 : e.cls === 'cleric' ? 24 : 2.5;
+    const arch = e.cls ? CLASSES[e.cls].arch : 'tank';
+    const reach = arch === 'caster' || arch === 'archer' ? 28 : arch === 'healer' ? 24 : 2.5;
     if (d > reach) w.moveToward(e, prey.x, prey.z, dt, reach - 1);
     else {
       e.target = prey.id;

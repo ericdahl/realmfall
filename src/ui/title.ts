@@ -1,6 +1,6 @@
 /** Title screen: saved heroes and hero creation, over a live view of the war. */
 import { REALM_DEFS, type RealmId } from '../game/geo';
-import { CLASSES, CLASS_IDS, realmName, type ClassId } from '../game/data';
+import { CLASSES, classesOf, classFor, realmName, type ClassId } from '../game/data';
 import type { CharSave } from '../game/types';
 import { World } from '../game/world';
 import { loadChars, deleteChar } from './save';
@@ -76,7 +76,7 @@ export class Title {
       <div class="realms">${REALM_DEFS.map((r) => `<button class="realm ${r.id === this.realm ? 'on' : ''}" data-r="${r.id}" style="--c:${r.color};--d:${r.dark}">
         <span class="crest"></span><b>${r.name}</b><small>${r.blurb}</small></button>`).join('')}</div>
       <h2>Choose your calling</h2>
-      <div class="classes">${CLASS_IDS.map((c) => `<button class="cls ${c === this.cls ? 'on' : ''}" data-c="${c}"><b>${CLASSES[c].name}</b><small>${CLASSES[c].role}</small></button>`).join('')}</div>
+      <div class="classes">${classesOf(this.realm).map((c) => `<button class="cls ${c === this.cls ? 'on' : ''}" data-c="${c}"><b>${CLASSES[c].name}</b><small>${CLASSES[c].role}</small></button>`).join('')}</div>
       <p class="clsdesc">${CLASSES[this.cls].desc}</p>
       <div class="namerow"><input maxlength="14" value="${name}" aria-label="Name"><button class="dice" title="Another name">⟳</button></div>
       <div class="row">${chars.length ? '<button class="big ghost" data-back>Back</button>' : ''}<button class="big" data-go>Enter ${REALM_DEFS[this.realm].name}</button></div>
@@ -85,6 +85,7 @@ export class Title {
     this.el.querySelectorAll<HTMLButtonElement>('.realm').forEach((b) => b.addEventListener('click', () => {
       sfx.click();
       this.realm = +b.dataset.r! as RealmId;
+      this.cls = classFor(this.realm, CLASSES[this.cls].arch);
       this.create();
     }));
     this.el.querySelectorAll<HTMLButtonElement>('.cls').forEach((b) => b.addEventListener('click', () => {

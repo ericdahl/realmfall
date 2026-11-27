@@ -400,7 +400,7 @@ export class Hud {
     const buffs = $(el, '.buffs');
     const parts = e.effects.map((f) => {
       const left = Math.max(0, Math.ceil(f.until - w.t));
-      const good = (f.type === 'buff' && f.value >= 0) || f.type === 'hot' || f.type === 'absorb' || f.type === 'focus' || f.type === 'freedom';
+      const good = (f.type === 'buff' && f.value >= 0) || f.type === 'hot' || f.type === 'absorb' || f.type === 'focus' || f.type === 'freedom' || f.type === 'thorns';
       const label = f.type === 'snare' ? 'Slowed' : f.type === 'stun' ? 'Stunned' : f.type === 'root' ? 'Rooted' : f.type === 'dot' ? 'Bleeding' : f.type === 'taunt' ? 'Taunted' : f.type === 'focus' ? 'Focus' : f.name;
       return `<span class="${good ? 'good' : 'bad'}">${label} ${left > 99 ? Math.ceil(left / 60) + 'm' : left + 's'}</span>`;
     });

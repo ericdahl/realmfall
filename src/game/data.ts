@@ -1,14 +1,21 @@
 /** Static game data: classes, abilities, monsters, item bases and progression curves. */
 import type { RealmId } from './geo';
 
-export type ClassId = 'warden' | 'ranger' | 'runecaller' | 'cleric';
+/** What a class does in a fight. Every realm has one class of each. */
+export type Role = 'tank' | 'archer' | 'caster' | 'healer';
+export const ROLES: Role[] = ['tank', 'archer', 'caster', 'healer'];
+export type ClassId =
+  | 'warden' | 'yeoman' | 'wizard' | 'cleric' // Valmora
+  | 'thornguard' | 'ranger' | 'mistweaver' | 'druid' // Eldwyn
+  | 'huskarl' | 'hunter' | 'runecarver' | 'seer'; // Hroth
 export type StatId = 'str' | 'con' | 'dex' | 'int' | 'pie';
 export const STATS: StatId[] = ['str', 'con', 'dex', 'int', 'pie'];
 export const STAT_NAMES: Record<StatId, string> = { str: 'Strength', con: 'Constitution', dex: 'Dexterity', int: 'Intelligence', pie: 'Piety' };
 
-export type WeaponKind = 'sword' | 'bow' | 'staff' | 'mace' | 'claws' | 'fangs' | 'fists' | 'branch' | 'spores';
+export type WeaponKind = 'sword' | 'axe' | 'bow' | 'staff' | 'mace' | 'claws' | 'fangs' | 'fists' | 'branch' | 'spores';
 export const WEAPONS: Record<WeaponKind, { speed: number; range: number; verb: string; noun: string; ranged?: boolean }> = {
   sword: { speed: 3.4, range: 3.6, verb: 'attack', noun: 'sword' },
+  axe: { speed: 3.6, range: 3.6, verb: 'attack', noun: 'axe' },
   bow: { speed: 4.2, range: 38, verb: 'shoot', noun: 'bow', ranged: true },
   staff: { speed: 4.0, range: 3.8, verb: 'attack', noun: 'staff' },
   mace: { speed: 3.6, range: 3.6, verb: 'attack', noun: 'mace' },
@@ -25,6 +32,9 @@ export const ARMOR_MUL: Record<ArmorType, number> = { plate: 1, chain: 0.85, lea
 export interface ClassDef {
   id: ClassId;
   name: string;
+  realm: RealmId;
+  arch: Role;
+  /** a few words for the class picker */
   role: string;
   desc: string;
   hpPerLevel: number;
@@ -40,40 +50,59 @@ export interface ClassDef {
   melee: number;
 }
 
-export const CLASSES: Record<ClassId, ClassDef> = {
-  warden: {
-    id: 'warden', name: 'Warden', role: 'Sword and shield',
-    desc: 'Heavy armour, a shield and a chain of sword styles. Parries open Riposte; Slash opens Backhand, and Backhand opens Executioner.',
+type Template = Omit<ClassDef, 'id' | 'name' | 'realm' | 'arch' | 'role' | 'desc'>;
+const TEMPLATES: Record<Role, Template> = {
+  tank: {
     hpPerLevel: 21, powerStat: null,
     base: { str: 60, con: 55, dex: 45, int: 30, pie: 35 }, growth: { str: 2.5, con: 2, dex: 1, int: 0, pie: 0.5 },
     weapon: 'sword', armor: 'plate', parry: 0.09, block: 0.14, evade: 0.03, melee: 1.25,
   },
-  ranger: {
-    id: 'ranger', name: 'Ranger', role: 'Bow',
-    desc: 'Leather, a longbow and a hunter’s patience. Draw times are long and any hit spoils the shot, so open from range and snare whatever runs at you.',
+  archer: {
     hpPerLevel: 15, powerStat: null,
     base: { str: 45, con: 45, dex: 60, int: 30, pie: 35 }, growth: { str: 1, con: 1.5, dex: 2.5, int: 0, pie: 0.5 },
     weapon: 'bow', armor: 'leather', parry: 0.04, block: 0, evade: 0.12, melee: 0.5,
   },
-  runecaller: {
-    id: 'runecaller', name: 'Runecaller', role: 'Fire, frost and lightning',
-    desc: 'Cloth robes and a stack of runes. Hits for more than anyone, but a single blow interrupts a spell. Root and Frost Lance keep things at a distance.',
+  caster: {
     hpPerLevel: 11, powerStat: 'int',
     base: { str: 30, con: 40, dex: 50, int: 65, pie: 35 }, growth: { str: 0, con: 1, dex: 1, int: 3, pie: 0 },
     weapon: 'staff', armor: 'cloth', parry: 0, block: 0, evade: 0.04, melee: 0.55,
   },
-  cleric: {
-    id: 'cleric', name: 'Cleric', role: 'Healing and holy wrath',
-    desc: 'Chain mail, a mace and a prayer for every occasion. Heals itself and its realm-mates, stuns, and smites from range.',
+  healer: {
     hpPerLevel: 16, powerStat: 'pie',
     base: { str: 45, con: 50, dex: 40, int: 30, pie: 65 }, growth: { str: 1, con: 1.5, dex: 0.5, int: 0, pie: 2.5 },
     weapon: 'mace', armor: 'chain', parry: 0.03, block: 0.1, evade: 0.03, melee: 1.15,
   },
 };
-export const CLASS_IDS: ClassId[] = ['warden', 'ranger', 'runecaller', 'cleric'];
 
-/** endu: extra endurance regained per second */
-export type BuffStat = 'dmg' | 'armor' | 'evade' | 'speed' | 'endu';
+function cls(id: ClassId, name: string, realm: RealmId, arch: Role, role: string, desc: string, over: Partial<Template> = {}): ClassDef {
+  return { id, name, realm, arch, role, desc, ...TEMPLATES[arch], ...over };
+}
+
+export const CLASSES: Record<ClassId, ClassDef> = {
+  // Valmora
+  warden: cls('warden', 'Warden', 0, 'tank', 'Sword and shield', 'Heavy armour, a shield and a chain of sword styles. Parries open Riposte; Slash opens Backhand, and Backhand opens Executioner.'),
+  yeoman: cls('yeoman', 'Yeoman', 0, 'archer', 'Longbow', 'Leather, a longbow and a soldier’s patience. Draw times are long and any hit spoils the shot, so open from range and snare whatever runs at you.'),
+  wizard: cls('wizard', 'Wizard', 0, 'caster', 'Fire, frost and storm', 'Cloth robes and a book of fire. Hits for more than anyone, but a single blow interrupts a spell. Root and Frost Lance keep things at a distance.'),
+  cleric: cls('cleric', 'Cleric', 0, 'healer', 'Healing and holy wrath', 'Chain mail, a mace and a prayer for every occasion. Heals itself and its realm-mates, stuns, and smites from range.'),
+  // Eldwyn
+  thornguard: cls('thornguard', 'Thornguard', 1, 'tank', 'Sword, shield and briars', 'A warden of the deep wood. Sword styles and a shield like any knight, but its skin grows thorns that hurt whoever strikes it, and the briars hold fast what tries to run.', { parry: 0.1, block: 0.13 }),
+  ranger: cls('ranger', 'Ranger', 1, 'archer', 'Bow and glamour', 'A forest archer who fights with light and illusion as much as arrows: dazzles the enemy so it misses, then slips away.', { evade: 0.13 }),
+  mistweaver: cls('mistweaver', 'Mistweaver', 1, 'caster', 'Light, void and mana', 'Weaves light into lances and the void into hunger. Void spells drain life back to the caster; mana spells root, ward and surge.'),
+  druid: cls('druid', 'Druid', 1, 'healer', 'Healing and the wild', 'Heals with the patience of the forest and stings with its wrath: swarms, entangling roots and a staff instead of a shield.', { weapon: 'staff', block: 0, parry: 0.06 }),
+  // Hroth
+  huskarl: cls('huskarl', 'Huskarl', 2, 'tank', 'Axe, shield and fury', 'An axe and a round shield. Axe styles bleed and split skulls, and Fury trades armour for blood: Berserk, War Cry and a refusal to fall.', { weapon: 'axe', block: 0.12, melee: 1.3 }),
+  hunter: cls('hunter', 'Hunter', 2, 'archer', 'Bow', 'A Hroth bow in the snow. Long draws, crippling arrows and the hardiness to outlast what it hunts.'),
+  runecarver: cls('runecarver', 'Runecarver', 2, 'caster', 'Runes, frost and darkness', 'Carves runes that bind and burst, freezes what comes close, and drinks the life of its enemies through the dark.'),
+  seer: cls('seer', 'Seer', 2, 'healer', 'Healing, storm and augury', 'Heals, calls lightning down on the realm’s enemies, and reads the fates for haste and foresight.'),
+};
+export const CLASS_IDS = Object.keys(CLASSES) as ClassId[];
+export const classesOf = (realm: RealmId) => CLASS_IDS.filter((c) => CLASSES[c].realm === realm);
+export const classFor = (realm: RealmId, role: Role) => CLASS_IDS.find((c) => CLASSES[c].realm === realm && CLASSES[c].arch === role)!;
+/** The class a hero of the four classes before realm classes became in each realm. */
+export const OLD_CLASS_ROLE: Record<string, Role> = { warden: 'tank', ranger: 'archer', runecaller: 'caster', cleric: 'healer' };
+
+/** endu: extra endurance regained per second. hit: added to the chance to hit (dazzles are negative). haste: faster swings and casts. */
+export type BuffStat = 'dmg' | 'armor' | 'evade' | 'speed' | 'endu' | 'hit' | 'haste';
 
 export type EffectDef =
   | { type: 'stun'; dur: number }
@@ -85,6 +114,7 @@ export type EffectDef =
   | { type: 'absorb'; dur: number; value: number; name?: string }
   | { type: 'restore'; dur: 0; value: number } // endurance, at once
   | { type: 'freedom'; dur: number } // clears and wards off snares and roots
+  | { type: 'thorns'; dur: number; value: number } // share of melee damage taken that hurts the attacker
   | { type: 'focus'; dur: number }
   | { type: 'taunt'; dur: number };
 
@@ -104,7 +134,7 @@ export interface AbilityDef {
   range?: number;
   target: 'enemy' | 'self' | 'ally' | 'pbaoe' | 'pbaoeAlly' | 'enemyAoe';
   radius?: number;
-  school: 'melee' | 'ranged' | 'fire' | 'cold' | 'energy' | 'holy';
+  school: 'melee' | 'ranged' | 'fire' | 'cold' | 'energy' | 'holy' | 'nature' | 'void' | 'light';
   /** style or shot: multiplier added to the swing */
   bonus?: number;
   /** spell damage or heal: a + b * level */
@@ -114,12 +144,14 @@ export interface AbilityDef {
   effects?: EffectDef[];
   /** weapon damage that ignores armour */
   pierce?: boolean;
+  /** share of the damage dealt that heals the caster */
+  drain?: number;
   /** spell can be cast while moving (instants always can) */
   noInterrupt?: boolean;
 }
 
 export const ABILITIES: Record<string, AbilityDef> = {
-  // Warden
+  // Warden (Blades, Shields, Defence)
   slash: { id: 'slash', name: 'Slash', icon: 'sword', desc: 'A heavy cut. Opens Backhand.', level: 1, kind: 'style', costType: 'endu', cost: 5, target: 'enemy', school: 'melee', bonus: 0.45 },
   shield_bash: { id: 'shield_bash', name: 'Shield Bash', icon: 'shield', desc: 'Stuns the target for 3 seconds and interrupts any spell.', level: 1, kind: 'instant', costType: 'endu', cost: 8, cd: 20, range: 4, target: 'enemy', school: 'melee', bonus: -0.5, effects: [{ type: 'stun', dur: 3 }] },
   riposte: { id: 'riposte', name: 'Riposte', icon: 'riposte', desc: 'After you parry: a fast counter for heavy damage.', level: 1, kind: 'style', costType: 'endu', cost: 4, target: 'enemy', school: 'melee', bonus: 1.3, req: { after: 'parry' } },
@@ -134,7 +166,7 @@ export const ABILITIES: Record<string, AbilityDef> = {
   stand_fast: { id: 'stand_fast', name: 'Stand Fast', icon: 'anchor', desc: 'Breaks snares and roots, and none can hold you for 10 seconds.', level: 15, kind: 'instant', costType: 'endu', cost: 8, cd: 60, target: 'self', school: 'melee', effects: [{ type: 'freedom', dur: 10 }] },
   taunt: { id: 'taunt', name: 'Challenge', icon: 'horn', desc: 'Forces nearby monsters and soldiers to attack you for 6 seconds.', level: 5, kind: 'instant', costType: 'endu', cost: 6, cd: 20, target: 'pbaoe', radius: 12, school: 'melee', effects: [{ type: 'taunt', dur: 6 }] },
 
-  // Ranger
+  // Yeoman and Hunter (Archery, Hunting, Survival)
   aimed_shot: { id: 'aimed_shot', name: 'Aimed Shot', icon: 'arrow', desc: 'A long draw for double damage.', level: 1, kind: 'shot', costType: 'endu', cost: 5, cast: 2.6, range: 40, target: 'enemy', school: 'ranged', bonus: 1.0 },
   crippling_arrow: { id: 'crippling_arrow', name: 'Crippling Arrow', icon: 'snarearrow', desc: 'A quick draw that slows the target by 45% for 10 seconds.', level: 1, kind: 'shot', costType: 'endu', cost: 6, cast: 1.5, range: 40, target: 'enemy', school: 'ranged', bonus: 0.1, effects: [{ type: 'snare', dur: 10, value: 0.45 }] },
   quick_shot: { id: 'quick_shot', name: 'Snap Shot', icon: 'quick', desc: 'An instant shot. Usable in melee.', level: 4, kind: 'instant', costType: 'endu', cost: 7, cd: 8, range: 40, target: 'enemy', school: 'ranged', bonus: 0.2 },
@@ -147,7 +179,7 @@ export const ABILITIES: Record<string, AbilityDef> = {
   fleet_foot: { id: 'fleet_foot', name: 'Fleet Foot', icon: 'boot', desc: 'Run 40% faster for 8 seconds.', level: 6, kind: 'instant', costType: 'endu', cost: 10, cd: 45, target: 'self', school: 'ranged', effects: [{ type: 'buff', dur: 8, stat: 'speed', value: 0.4, name: 'Fleet Foot' }] },
   field_dressing: { id: 'field_dressing', name: 'Field Dressing', icon: 'bandage', desc: 'Binds your wounds (or a friend’s), healing over 12 seconds.', level: 16, kind: 'instant', costType: 'endu', cost: 10, cd: 60, range: 6, target: 'ally', school: 'ranged', power: [4, 1.6], heal: true, effects: [{ type: 'hot', dur: 12, value: 1, name: 'Field Dressing' }] },
 
-  // Runecaller
+  // Wizard (Fire, Frost, Storm)
   fire_bolt: { id: 'fire_bolt', name: 'Fire Bolt', icon: 'fire', desc: 'Hurls fire at the target.', level: 1, kind: 'spell', costType: 'power', cost: 7, cast: 2.5, range: 34, target: 'enemy', school: 'fire', power: [9, 5.6] },
   frost_lance: { id: 'frost_lance', name: 'Frost Lance', icon: 'frost', desc: 'Cold damage that slows the target by 50% for 10 seconds.', level: 1, kind: 'spell', costType: 'power', cost: 7, cast: 2.1, range: 34, target: 'enemy', school: 'cold', power: [6, 3.6], effects: [{ type: 'snare', dur: 10, value: 0.5 }] },
   root: { id: 'root', name: 'Earthbind', icon: 'root', desc: 'Roots the target in place for 15 seconds. Damage frees it after the first two.', level: 1, kind: 'spell', costType: 'power', cost: 8, cast: 1.6, cd: 12, range: 32, target: 'enemy', school: 'energy', effects: [{ type: 'root', dur: 15 }] },
@@ -161,7 +193,7 @@ export const ABILITIES: Record<string, AbilityDef> = {
   frost_nova: { id: 'frost_nova', name: 'Frost Nova', icon: 'nova', desc: 'Instant cold around you (7 m) that roots everything it hits for 6 seconds.', level: 10, kind: 'instant', costType: 'power', cost: 10, cd: 25, radius: 7, target: 'pbaoe', school: 'cold', power: [3, 1.5], effects: [{ type: 'root', dur: 6 }] },
   hailstorm: { id: 'hailstorm', name: 'Hailstorm', icon: 'hail', desc: 'Hail on everything within 9 m of the target, slowing it by 40% for 8 seconds.', level: 15, kind: 'spell', costType: 'power', cost: 15, cast: 3, cd: 30, range: 36, radius: 9, target: 'enemyAoe', school: 'cold', power: [10, 5.5], effects: [{ type: 'snare', dur: 8, value: 0.4 }] },
 
-  // Cleric
+  // Cleric (Restoration, Smiting, Enhancement)
   smite: { id: 'smite', name: 'Smite', icon: 'sun', desc: 'Holy damage at range.', level: 1, kind: 'spell', costType: 'power', cost: 6, cast: 2.2, range: 32, target: 'enemy', school: 'holy', power: [7, 4.6] },
   mend: { id: 'mend', name: 'Mend', icon: 'heart', desc: 'Heals you or your target.', level: 1, kind: 'spell', costType: 'power', cost: 8, cast: 2.5, range: 30, target: 'ally', school: 'holy', power: [14, 8], heal: true },
   renew: { id: 'renew', name: 'Renew', icon: 'renew', desc: 'Heals over 12 seconds. Instant.', level: 4, kind: 'instant', costType: 'power', cost: 7, cd: 10, range: 30, target: 'ally', school: 'holy', power: [3, 1.4], heal: true, effects: [{ type: 'hot', dur: 12, value: 1 }] },
@@ -173,6 +205,60 @@ export const ABILITIES: Record<string, AbilityDef> = {
   ward_of_faith: { id: 'ward_of_faith', name: 'Ward of Faith', icon: 'wardfaith', desc: '+20% armour for you and realm-mates within 20 m, for 10 minutes.', level: 6, kind: 'instant', costType: 'power', cost: 10, cd: 10, radius: 20, target: 'pbaoeAlly', school: 'holy', effects: [{ type: 'buff', dur: 600, stat: 'armor', value: 0.2, name: 'Ward of Faith' }] },
   resolve: { id: 'resolve', name: 'Resolve', icon: 'resolve', desc: 'You and realm-mates within 20 m regain endurance twice as fast, for 10 minutes.', level: 11, kind: 'instant', costType: 'power', cost: 10, cd: 10, radius: 20, target: 'pbaoeAlly', school: 'holy', effects: [{ type: 'buff', dur: 600, stat: 'endu', value: 3.5, name: 'Resolve' }] },
   shield_of_faith: { id: 'shield_of_faith', name: 'Shield of Faith', icon: 'faithshield', desc: 'Wraps you or a friend in light that absorbs damage equal to a quarter of their life, for 20 seconds.', level: 16, kind: 'instant', costType: 'power', cost: 12, cd: 30, range: 30, target: 'ally', school: 'holy', effects: [{ type: 'absorb', dur: 20, value: 0.25, name: 'Shield of Faith' }] },
+
+  // Huskarl: Axes and Fury
+  cleave: { id: 'cleave', name: 'Cleave', icon: 'axe', desc: 'A heavy chop. Opens Gash.', level: 1, kind: 'style', costType: 'endu', cost: 5, target: 'enemy', school: 'melee', bonus: 0.45 },
+  gash: { id: 'gash', name: 'Gash', icon: 'gash', desc: 'Follows Cleave. A deep cut that bleeds for 10 seconds. Opens Skullsplitter.', level: 4, kind: 'style', costType: 'endu', cost: 6, target: 'enemy', school: 'melee', bonus: 0.8, req: { follow: 'cleave' }, effects: [{ type: 'dot', dur: 10, value: 0.06 }] },
+  hamstring: { id: 'hamstring', name: 'Hamstring', icon: 'flank', desc: 'From the side or behind: hits hard and slows the target by 40% for 10 seconds.', level: 8, kind: 'style', costType: 'endu', cost: 7, target: 'enemy', school: 'melee', bonus: 1.1, req: { pos: 'side' }, effects: [{ type: 'snare', dur: 10, value: 0.4 }] },
+  skullsplitter: { id: 'skullsplitter', name: 'Skullsplitter', icon: 'skull', desc: 'Follows Gash. A brutal overhead blow.', level: 12, kind: 'style', costType: 'endu', cost: 8, target: 'enemy', school: 'melee', bonus: 2.2, req: { follow: 'gash' } },
+  whirling_axe: { id: 'whirling_axe', name: 'Whirling Axe', icon: 'whirl', desc: 'Spins with the axe out, hitting every enemy within 5 metres.', level: 16, kind: 'instant', costType: 'endu', cost: 12, cd: 20, radius: 5, target: 'pbaoe', school: 'melee', bonus: 0.3 },
+  berserk: { id: 'berserk', name: 'Berserk', icon: 'rage', desc: '+25% damage for 15 seconds, but 20% less armour.', level: 1, kind: 'instant', costType: 'endu', cost: 8, cd: 60, target: 'self', school: 'melee', effects: [{ type: 'buff', dur: 15, stat: 'dmg', value: 0.25, name: 'Berserk' }, { type: 'buff', dur: 15, stat: 'armor', value: -0.2, name: 'Berserk (reckless)' }] },
+  war_cry: { id: 'war_cry', name: 'War Cry', icon: 'warcry', desc: '+10% damage for you and realm-mates within 15 m, for 30 seconds.', level: 5, kind: 'instant', costType: 'endu', cost: 10, cd: 60, radius: 15, target: 'pbaoeAlly', school: 'melee', effects: [{ type: 'buff', dur: 30, stat: 'dmg', value: 0.1, name: 'War Cry' }] },
+
+  // Thornguard: Briar
+  thorn_skin: { id: 'thorn_skin', name: 'Thorn Skin', icon: 'thorns', desc: 'For 30 seconds, whoever hits you in melee takes a quarter of the damage back.', level: 1, kind: 'instant', costType: 'endu', cost: 8, cd: 40, target: 'self', school: 'nature', effects: [{ type: 'thorns', dur: 30, value: 0.25 }] },
+  entangle: { id: 'entangle', name: 'Entangle', icon: 'vines', desc: 'Roots the target in place for 8 seconds. Damage frees it after the first two.', level: 5, kind: 'instant', costType: 'endu', cost: 8, cd: 30, range: 20, target: 'enemy', school: 'nature', effects: [{ type: 'root', dur: 8 }] },
+  briar_patch: { id: 'briar_patch', name: 'Briar Patch', icon: 'bramble', desc: 'Briars burst from the ground around you (8 m), slowing every enemy by 50% for 8 seconds.', level: 14, kind: 'instant', costType: 'endu', cost: 10, cd: 25, radius: 8, target: 'pbaoe', school: 'nature', effects: [{ type: 'snare', dur: 8, value: 0.5 }] },
+
+  // Ranger: Glamour
+  dazzle: { id: 'dazzle', name: 'Dazzle', icon: 'dazzle', desc: 'A flash of glamour: the target misses 30% more often for 10 seconds.', level: 5, kind: 'instant', costType: 'endu', cost: 8, cd: 20, range: 30, target: 'enemy', school: 'nature', effects: [{ type: 'buff', dur: 10, stat: 'hit', value: -0.3, name: 'Dazzled' }] },
+  shimmer: { id: 'shimmer', name: 'Shimmer', icon: 'shimmer', desc: 'An illusion takes the blows: absorbs damage equal to a fifth of your life for 20 seconds.', level: 14, kind: 'instant', costType: 'endu', cost: 10, cd: 60, target: 'self', school: 'nature', effects: [{ type: 'absorb', dur: 20, value: 0.2, name: 'Shimmer' }] },
+
+  // Mistweaver: Light, Void, Mana
+  light_bolt: { id: 'light_bolt', name: 'Light Bolt', icon: 'sun', desc: 'Hurls a bolt of light at the target.', level: 1, kind: 'spell', costType: 'power', cost: 7, cast: 2.5, range: 34, target: 'enemy', school: 'light', power: [9, 5.6] },
+  sunflare: { id: 'sunflare', name: 'Sunflare', icon: 'nova', desc: 'Instant light around you (8 m) that burns and dazzles: enemies miss 25% more often for 8 seconds.', level: 6, kind: 'instant', costType: 'power', cost: 10, cd: 20, radius: 8, target: 'pbaoe', school: 'light', power: [6, 3], effects: [{ type: 'buff', dur: 8, stat: 'hit', value: -0.25, name: 'Dazzled' }] },
+  radiant_lance: { id: 'radiant_lance', name: 'Radiant Lance', icon: 'lance', desc: 'A slow cast that strikes very hard.', level: 10, kind: 'spell', costType: 'power', cost: 11, cast: 3.2, range: 36, target: 'enemy', school: 'light', power: [16, 10] },
+  dawnstrike: { id: 'dawnstrike', name: 'Dawnstrike', icon: 'meteor', desc: 'Light from the sky on everything within 9 m of the target.', level: 15, kind: 'spell', costType: 'power', cost: 16, cast: 3.5, cd: 30, range: 36, radius: 9, target: 'enemyAoe', school: 'light', power: [14, 7.5] },
+  void_bolt: { id: 'void_bolt', name: 'Void Bolt', icon: 'void', desc: 'Void damage that slows the target by 50% for 10 seconds.', level: 1, kind: 'spell', costType: 'power', cost: 7, cast: 2.1, range: 34, target: 'enemy', school: 'void', power: [6, 3.6], effects: [{ type: 'snare', dur: 10, value: 0.5 }] },
+  entropy: { id: 'entropy', name: 'Entropy', icon: 'entropy', desc: 'Unravels the target: a small hit, then it withers for 12 seconds.', level: 5, kind: 'spell', costType: 'power', cost: 8, cast: 2, range: 34, target: 'enemy', school: 'void', power: [4, 2.2], effects: [{ type: 'dot', dur: 12, value: 0.12 }] },
+  unmaking: { id: 'unmaking', name: 'Unmaking', icon: 'drain', desc: 'Pulls the life out of the target; half of the damage heals you.', level: 10, kind: 'spell', costType: 'power', cost: 10, cast: 2.8, range: 30, target: 'enemy', school: 'void', power: [10, 6], drain: 0.5 },
+  oblivion: { id: 'oblivion', name: 'Oblivion', icon: 'oblivion', desc: 'A long cast that tears a hole in the target.', level: 15, kind: 'spell', costType: 'power', cost: 15, cast: 4, cd: 20, range: 36, target: 'enemy', school: 'void', power: [22, 13] },
+  mana_bind: { id: 'mana_bind', name: 'Mana Bind', icon: 'root', desc: 'Roots the target in place for 15 seconds. Damage frees it after the first two.', level: 1, kind: 'spell', costType: 'power', cost: 8, cast: 1.6, cd: 12, range: 32, target: 'enemy', school: 'energy', effects: [{ type: 'root', dur: 15 }] },
+  mana_ward: { id: 'mana_ward', name: 'Mana Ward', icon: 'ward', desc: 'Absorbs damage equal to a third of your life for 20 seconds.', level: 8, kind: 'instant', costType: 'power', cost: 12, cd: 45, target: 'self', school: 'energy', effects: [{ type: 'absorb', dur: 20, value: 0.33, name: 'Mana Ward' }] },
+  arcane_surge: { id: 'arcane_surge', name: 'Arcane Surge', icon: 'surge', desc: '+25% damage for 20 seconds.', level: 12, kind: 'instant', costType: 'power', cost: 8, cd: 90, target: 'self', school: 'energy', effects: [{ type: 'buff', dur: 20, stat: 'dmg', value: 0.25, name: 'Arcane Surge' }] },
+
+  // Runecarver: Runes and Darkness (Frost is shared with the Wizard)
+  rune_bolt: { id: 'rune_bolt', name: 'Rune Bolt', icon: 'rune', desc: 'A carved rune that bursts on the target.', level: 1, kind: 'spell', costType: 'power', cost: 7, cast: 2.5, range: 34, target: 'enemy', school: 'energy', power: [9, 5.6] },
+  binding_rune: { id: 'binding_rune', name: 'Binding Rune', icon: 'binding', desc: 'Roots the target in place for 15 seconds. Damage frees it after the first two.', level: 7, kind: 'spell', costType: 'power', cost: 8, cast: 1.6, cd: 12, range: 32, target: 'enemy', school: 'energy', effects: [{ type: 'root', dur: 15 }] },
+  rune_blast: { id: 'rune_blast', name: 'Rune Blast', icon: 'ring', desc: 'The runes on your robes burst: instant damage around you (8 m).', level: 10, kind: 'instant', costType: 'power', cost: 10, cd: 15, radius: 8, target: 'pbaoe', school: 'energy', power: [8, 4] },
+  great_rune: { id: 'great_rune', name: 'Great Rune', icon: 'greatrune', desc: 'A rune the size of a hall bursts on everything within 9 m of the target.', level: 15, kind: 'spell', costType: 'power', cost: 16, cast: 3.5, cd: 30, range: 36, radius: 9, target: 'enemyAoe', school: 'energy', power: [14, 7.5] },
+  drain_life: { id: 'drain_life', name: 'Drain Life', icon: 'drain', desc: 'Darkness damage; half of it heals you.', level: 1, kind: 'spell', costType: 'power', cost: 7, cast: 2.6, range: 30, target: 'enemy', school: 'void', power: [6, 3.8], drain: 0.5 },
+  wither: { id: 'wither', name: 'Wither', icon: 'entropy', desc: 'A small hit, then the target rots for 12 seconds.', level: 5, kind: 'spell', costType: 'power', cost: 8, cast: 2, range: 34, target: 'enemy', school: 'void', power: [4, 2.2], effects: [{ type: 'dot', dur: 12, value: 0.12 }] },
+  dread: { id: 'dread', name: 'Dread', icon: 'skull', desc: 'Terror freezes the target for 3 seconds and stops any spell.', level: 9, kind: 'instant', costType: 'power', cost: 8, cd: 30, range: 20, target: 'enemy', school: 'void', effects: [{ type: 'stun', dur: 3 }] },
+  soul_siphon: { id: 'soul_siphon', name: 'Soul Siphon', icon: 'siphon', desc: 'A slow cast that tears out the target’s life; 60% of the damage heals you.', level: 13, kind: 'spell', costType: 'power', cost: 12, cast: 3.2, cd: 15, range: 30, target: 'enemy', school: 'void', power: [14, 8.5], drain: 0.6 },
+
+  // Druid: Nature (Restoration and Enhancement are shared with the Cleric)
+  sting: { id: 'sting', name: 'Sting', icon: 'thorns', desc: 'Nature damage at range.', level: 1, kind: 'spell', costType: 'power', cost: 6, cast: 2.2, range: 32, target: 'enemy', school: 'nature', power: [7, 4.6] },
+  swarm: { id: 'swarm', name: 'Swarm', icon: 'swarm', desc: 'Insects sting the target for 12 seconds.', level: 9, kind: 'spell', costType: 'power', cost: 9, cast: 2.4, range: 32, target: 'enemy', school: 'nature', power: [6, 3], effects: [{ type: 'dot', dur: 12, value: 0.1 }] },
+  wrath_of_the_wild: { id: 'wrath_of_the_wild', name: 'Wrath of the Wild', icon: 'bramble', desc: 'Thorns and stones on everything within 9 m of the target.', level: 13, kind: 'spell', costType: 'power', cost: 15, cast: 3, cd: 30, range: 36, radius: 9, target: 'enemyAoe', school: 'nature', power: [10, 5.5] },
+
+  // Seer: Storm and Augury (Restoration is shared with the Cleric)
+  spark: { id: 'spark', name: 'Spark', icon: 'bolt', desc: 'Lightning at range.', level: 1, kind: 'spell', costType: 'power', cost: 6, cast: 2.2, range: 32, target: 'enemy', school: 'energy', power: [7, 4.6] },
+  gale: { id: 'gale', name: 'Gale', icon: 'wind', desc: 'A freezing wind that hurts and slows the target by 40% for 10 seconds.', level: 5, kind: 'spell', costType: 'power', cost: 7, cast: 2, range: 32, target: 'enemy', school: 'cold', power: [5, 3], effects: [{ type: 'snare', dur: 10, value: 0.4 }] },
+  thunderstrike: { id: 'thunderstrike', name: 'Thunderstrike', icon: 'stun', desc: 'Stuns the target for 4 seconds.', level: 9, kind: 'instant', costType: 'power', cost: 8, cd: 30, range: 20, target: 'enemy', school: 'energy', effects: [{ type: 'stun', dur: 4 }] },
+  foresight: { id: 'foresight', name: 'Foresight', icon: 'eye', desc: '+6% chance to evade for you and realm-mates within 20 m, for 10 minutes.', level: 1, kind: 'instant', costType: 'power', cost: 8, cd: 10, radius: 20, target: 'pbaoeAlly', school: 'energy', effects: [{ type: 'buff', dur: 600, stat: 'evade', value: 0.06, name: 'Foresight' }] },
+  haste: { id: 'haste', name: 'Haste', icon: 'haste', desc: 'You and realm-mates within 20 m swing and cast 15% faster, for 10 minutes.', level: 5, kind: 'instant', costType: 'power', cost: 10, cd: 10, radius: 20, target: 'pbaoeAlly', school: 'energy', effects: [{ type: 'buff', dur: 600, stat: 'haste', value: 0.15, name: 'Haste' }] },
+  fates_ward: { id: 'fates_ward', name: 'Fate’s Ward', icon: 'faithshield', desc: 'The fates turn a blow: absorbs damage equal to a quarter of a friend’s life, for 20 seconds.', level: 16, kind: 'instant', costType: 'power', cost: 12, cd: 30, range: 30, target: 'ally', school: 'energy', effects: [{ type: 'absorb', dur: 20, value: 0.25, name: 'Fate’s Ward' }] },
 
   // Monster abilities
   bog_bolt: { id: 'bog_bolt', name: 'bog bolt', icon: 'frost', desc: '', level: 1, kind: 'spell', costType: 'power', cost: 0, cast: 2.4, range: 28, target: 'enemy', school: 'cold', power: [5, 3.2], effects: [{ type: 'snare', dur: 5, value: 0.3 }] },
