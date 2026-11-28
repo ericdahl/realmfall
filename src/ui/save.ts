@@ -37,7 +37,7 @@ const OLD_LINES: Record<string, string[]> = {
  * Before 3 (version 1 had no specialization lines; version 2 had four classes shared by every
  * realm): the hero becomes its realm's class of the same role, each line's level carried to the
  * line in the same place (or the class's usual build), with a free respec.
- * Before 4: no realm abilities yet.
+ * Before 4: no realm abilities yet. Before 5: no companions.
  */
 export function migrateChar(c: CharSave) {
   if (c.version >= SAVE_VERSION) return;
@@ -58,6 +58,7 @@ export function migrateChar(c: CharSave) {
     }
   }
   if (c.version < 4) c.ras = {};
+  if (c.version < 5) c.party = [];
   c.version = SAVE_VERSION;
 }
 

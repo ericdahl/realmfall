@@ -1,5 +1,5 @@
 /** How monsters, soldiers, guards and wandering adventurers decide what to do. */
-import { ABILITIES, CLASSES, conColor } from './data';
+import { ABILITIES, BOSSES, CLASSES, conColor } from './data';
 import { siteById, homeLevel, FRONTIER_R } from './geo';
 import type { Entity } from './types';
 import { dist, angleTo, type World } from './world';
@@ -100,16 +100,11 @@ function fight(w: World, e: Entity, t: Entity, dt: number) {
   e.facing = angleTo(e, t);
 
   if (mob) {
-    if (mob.caster && d > 5 && (e.cds.bog_bolt ?? 0) <= w.t && w.rng.chance(0.5)) {
-      w.useAbility(e, 'bog_bolt', t.id);
-      e.cds.bog_bolt = w.t + w.rng.range(5, 8);
-      return;
-    }
+    if (mobAbilities(w, e, t, d)) return;
     if (mob.caster && d > e.weapon.range) {
       w.moveToward(e, t.x, t.z, dt, e.weapon.range * 0.9 + t.radius + e.radius);
       return;
     }
-    if (e.abilities.includes('slam') && d < 5 && (e.cds.slam ?? 0) <= w.t) w.useAbility(e, 'slam', t.id);
     if (e.abilities.includes('venom') && !e.queuedStyle && w.rng.chance(0.02)) e.queuedStyle = 'venom';
     return;
   }
@@ -226,6 +221,39 @@ function countAllies(w: World, e: Entity, r: number) {
   return n;
 }
 
+/** Monsters use whatever they have: mends on hurt friends, blasts when foes are close, bolts at range. */
+function mobAbilities(w: World, e: Entity, t: Entity, d: number): boolean {
+  for (const id of e.abilities) {
+    const ab = ABILITIES[id];
+    if (!ab || ab.kind === 'style' || (e.cds[id] ?? 0) > w.t) continue;
+    if (ab.heal) {
+      let hurt: Entity | null = null;
+      w.near(e.x, e.z, ab.range ?? 25, (o) => { if (!hurt && o.kind === 'mob' && !o.dead && o.hp < o.maxHp * 0.6 && w.los(e, o)) hurt = o; });
+      if (hurt && w.useAbility(e, id, (hurt as Entity).id) === null) return true;
+      continue;
+    }
+    if (ab.target === 'pbaoe') {
+      if (countNear(w, e, e, (ab.radius ?? 8) - 1) >= 1 && w.rng.chance(0.4) && w.useAbility(e, id) === null) return true;
+      continue;
+    }
+    if (ab.target !== 'enemy') continue;
+    if (id === 'rush') {
+      if (d > 7 && d < 24 && w.useAbility(e, id, t.id) === null) return true;
+      continue;
+    }
+    if (ab.kind === 'spell') {
+      // bolts now and then from range; most monsters still close in to fight
+      if (d > 5 && w.rng.chance(0.5) && w.useAbility(e, id, t.id) === null) {
+        e.cds[id] = w.t + w.rng.range(5, 8);
+        return true;
+      }
+      continue;
+    }
+    if (d <= (ab.range ?? 5) && w.useAbility(e, id, t.id) === null) return true;
+  }
+  return false;
+}
+
 function countNear(w: World, e: Entity, t: Entity, r: number) {
   let n = 0;
   w.near(t.x, t.z, r, (o) => { if (w.hostile(e, o)) n++; });
@@ -270,6 +298,10 @@ export function thinkMob(w: World, e: Entity, dt: number) {
       e.hp = e.maxHp;
       e.threat.clear();
       e.dmgBy.clear();
+      if (def.lurks) e.stealthed = true;
+      // a boss that wins resets its script
+      if (e.enraged) { e.enraged = false; e.dmgMul /= 1.5; e.speed /= 1.2; }
+      if (e.boss) e.phase = 0;
     }
     return;
   }
@@ -293,6 +325,14 @@ export function thinkMob(w: World, e: Entity, dt: number) {
       w.moveToward(e, e.x + Math.cos(a) * 10, e.z + Math.sin(a) * 10, dt, 0, 0.8);
       return;
     }
+    if (e.boss || def.enrage) {
+      if (e.boss && !(e.phase! & (1 << 30))) {
+        e.phase! |= 1 << 30;
+        const line = BOSSES[e.boss].say;
+        if (line) w.say(e, line);
+      }
+      w.bossTick(e);
+    }
     fight(w, e, t, dt);
     separate(w, e, t);
     return;
@@ -300,7 +340,7 @@ export function thinkMob(w: World, e: Entity, dt: number) {
   // idle or wandering: look for trouble
   if (def.aggro > 0 && w.t >= ai.think) {
     ai.think = w.t + 0.4 + w.rng.next() * 0.4;
-    const t = w.nearest(e, def.aggro * (e.named ? 1.3 : 1), (o) => (o.kind === 'player' || o.kind === 'adventurer' || o.kind === 'soldier') && w.hostile(e, o) && conColor(o.level, e.level) !== 'grey' && w.canSee(e, o));
+    const t = w.nearest(e, def.aggro * (e.named ? 1.3 : 1), (o) => (o.kind === 'player' || o.kind === 'adventurer' || o.kind === 'soldier') && w.hostile(e, o) && conColor(o.level, e.level) !== 'grey' && w.canSee(e, o) && w.los(e, o));
     if (t) {
       e.target = t.id;
       e.threat.set(t.id, 1);
@@ -350,6 +390,10 @@ export function thinkCombatant(w: World, e: Entity, dt: number) {
   e.moved = 0;
   const ai = e.ai;
   if (w.stunned(e)) return;
+  if (e.kind === 'companion') {
+    thinkCompanion(w, e, dt);
+    return;
+  }
 
   // Choose an enemy.
   let t = topThreat(w, e) ?? validTarget(w, e);
@@ -358,7 +402,7 @@ export function thinkCombatant(w: World, e: Entity, dt: number) {
     ai.think = w.t + 0.35 + w.rng.next() * 0.3;
     if (!t || (e.kind === 'soldier' && t.kind === 'door')) {
       const pred = (o: Entity) =>
-        w.hostile(e, o) && w.canSee(e, o) && o.kind !== 'door' && (e.kind !== 'adventurer' || o.kind === 'mob') && (o.kind !== 'mob' || e.kind === 'guard' || e.kind === 'adventurer' || o.target != null);
+        w.hostile(e, o) && w.canSee(e, o) && w.los(e, o) && o.kind !== 'door' && (e.kind !== 'adventurer' || o.kind === 'mob') && (o.kind !== 'mob' || e.kind === 'guard' || e.kind === 'adventurer' || o.target != null);
       const n = w.nearest(e, engage, pred);
       if (n) t = n;
     }
@@ -473,3 +517,71 @@ function adventure(w: World, e: Entity, dt: number) {
 }
 
 export { ABILITIES };
+
+// ---------- companions ----------
+
+/** Where each companion walks, relative to the leader: behind and to either side. */
+const SLOTS_BEHIND = [{ back: 3, side: -2.2 }, { back: 3, side: 2.2 }, { back: 5.5, side: 0 }];
+
+/**
+ * Hired companions follow their leader, fight what the leader fights, and defend the party.
+ * Tanks go for whatever is hitting someone else; healers keep everyone up and buffed.
+ */
+function thinkCompanion(w: World, e: Entity, dt: number) {
+  const p = w.get(e.leader);
+  if (!p) return;
+  const role = CLASSES[e.cls!].arch;
+  e.moved = 0;
+  if (role === 'healer' && !e.cast && healSomeone(w, e)) return;
+  const party = w.partyIds();
+  const fair = (o: Entity | undefined): o is Entity => !!o && !o.dead && w.hostile(e, o) && w.canSee(e, o) && w.los(e, o) && o.kind !== 'door';
+  let t: Entity | undefined;
+  // whatever is after one of us: a tank takes the one hitting someone else
+  let onUs: Entity | undefined, onOthers: Entity | undefined;
+  w.near(p.x, p.z, 30, (o) => {
+    if (!fair(o) || o.target == null || !party.has(o.target)) return;
+    if (!onUs || dist(e, o) < dist(e, onUs)) onUs = o;
+    if (o.target !== e.id && (!onOthers || dist(e, o) < dist(e, onOthers))) onOthers = o;
+  });
+  const pt = w.get(p.target);
+  if (!p.dead && fair(pt) && dist(p, pt) < 45 && (p.attacking || p.cast || pt.target === p.id || w.t - p.lastCombat < 4)) t = pt;
+  if (role === 'tank' && onOthers) t = onOthers;
+  t ??= onUs;
+  if (!t) {
+    const cur = w.get(e.target);
+    if (fair(cur) && w.t - e.lastCombat < 6) t = cur;
+  }
+  if (t) {
+    e.ai.mode = 'combat';
+    e.sprinting = false;
+    fight(w, e, t, dt);
+    return;
+  }
+  e.attacking = false;
+  e.target = null;
+  if (e.cast) return;
+  e.ai.mode = 'idle';
+  // out of a fight, healers keep the party's blessings up
+  if (role === 'healer' && w.t - e.lastCombat > 3) {
+    for (const ab of ['blessing', 'ward_of_faith', 'resolve', 'foresight', 'haste']) {
+      const name = ABILITIES[ab].effects?.[0] && 'name' in ABILITIES[ab].effects![0] ? (ABILITIES[ab].effects![0] as { name: string }).name : '';
+      if (e.abilities.includes(ab) && !p.effects.some((f) => f.name === name) && dist(e, p) < 15 && try_(w, e, ab, e)) return;
+    }
+  }
+  const sl = SLOTS_BEHIND[e.slot ?? 0] ?? SLOTS_BEHIND[2];
+  const cs = Math.cos(p.facing), sn = Math.sin(p.facing);
+  const gx = p.x - cs * sl.back - sn * sl.side, gz = p.z - sn * sl.back + cs * sl.side;
+  const d = Math.hypot(e.x - gx, e.z - gz);
+  if (d > 80 || !w.los(e, p) && d > 40) {
+    e.x = gx;
+    e.z = gz;
+    return;
+  }
+  if (d > 1.2) {
+    e.sprinting = d > 9 && e.endu > 15;
+    w.moveToward(e, gx, gz, dt, 0.6);
+  } else {
+    e.sprinting = false;
+    if (Math.hypot(p.x - e.x, p.z - e.z) > 0.5) e.facing = p.facing;
+  }
+}

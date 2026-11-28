@@ -1,12 +1,12 @@
 import type { RealmId } from './geo';
-import type { BuffStat, ClassId, EffectDef, MobDef, StatId, WeaponKind } from './data';
+import type { BuffStat, ClassId, EffectDef, Role, MobDef, StatId, WeaponKind } from './data';
 import type { Specs } from './specs';
 import type { RealmAbilities } from './realm';
 import type { Item, Slot } from './items';
 
 export type Team = RealmId | -1;
-export type Kind = 'player' | 'mob' | 'soldier' | 'guard' | 'lord' | 'door' | 'npc' | 'adventurer';
-export type NpcRole = 'merchant' | 'teleporter' | 'healer' | 'taskmaster' | 'gatekeeper';
+export type Kind = 'player' | 'mob' | 'soldier' | 'guard' | 'lord' | 'door' | 'npc' | 'adventurer' | 'companion';
+export type NpcRole = 'merchant' | 'teleporter' | 'healer' | 'taskmaster' | 'gatekeeper' | 'captain';
 
 export interface Effect {
   type: 'stun' | 'root' | 'snare' | 'dot' | 'hot' | 'buff' | 'absorb' | 'focus' | 'taunt' | 'freedom' | 'thorns' | 'imbue' | 'purge';
@@ -106,6 +106,20 @@ export interface Entity {
   sprinting: boolean;
   /** in the shadows: hostiles only see it within their detect range */
   stealthed?: boolean;
+  /** dungeon monsters: tougher than field ones, and worth more */
+  rank?: 'elite' | 'mini' | 'boss';
+  /** BOSSES id, for minis and bosses */
+  boss?: string;
+  /** summons already called, as a bit per entry */
+  phase?: number;
+  enraged?: boolean;
+  /** has already got back up once */
+  rose?: boolean;
+  /** the dungeon it was spawned in */
+  dungeon?: string;
+  /** companions: whom they follow, and their place in the party */
+  leader?: number;
+  slot?: number;
   invulnerable?: boolean;
   look?: { body: string; trim: string; weapon?: string; helm?: boolean; bones?: boolean };
   title?: string;
@@ -115,6 +129,8 @@ export interface Entity {
   /** realm abilities bought (the player's) */
   ras?: RealmAbilities;
 }
+
+export interface PartyMember { role: Role; name: string }
 
 export interface Task {
   mob: string;
@@ -142,6 +158,8 @@ export interface CharSave {
   freeRespec?: boolean;
   /** realm abilities bought, by level */
   ras: RealmAbilities;
+  /** companions hired, who travel and fight with the hero */
+  party: PartyMember[];
   equip: Record<Slot, Item>;
   bag: Item[];
   potions: { health: number; power: number };

@@ -1,4 +1,5 @@
 /** Keyboard and mouse: MMO-style movement and an orbiting third-person camera. */
+import { dungeonAt, walkable, los, DUNGEON_FLOOR, WALL_H } from '../game/dungeon';
 import * as THREE from 'three';
 import type { World } from '../game/world';
 
@@ -142,6 +143,16 @@ export class Controls {
       d *= 0.8;
     }
     y = Math.max(y, this.w.geo.standY(x, z) + 0.6);
+    // underground, pull the camera in until it is on our side of the walls
+    const dg = dungeonAt(fx, fz);
+    if (dg && y < DUNGEON_FLOOR + WALL_H + 2) {
+      for (let i = 0; i < 12 && !(walkable(dg, x, z, 0.4) && los(dg, fx, fz, x, z)); i++) {
+        d *= 0.8;
+        x = fx - Math.cos(this.yaw) * cp * d;
+        z = fz - Math.sin(this.yaw) * cp * d;
+        y = Math.max(fy + sp * d, DUNGEON_FLOOR + 0.6);
+      }
+    }
     cam.position.set(x, y, z);
     cam.lookAt(fx, fy + 0.2, fz);
   }

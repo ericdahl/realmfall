@@ -10,6 +10,7 @@ import { sfx } from './audio';
 import { formatMoney } from '../game/items';
 import { ownerColor } from '../render/structures';
 import { LINES, freePoints, lineOf } from '../game/specs';
+import { dungeonAt } from '../game/dungeon';
 import { REALM_ABILITIES, RA_BY_ID, raFree, raBlocked, realmLevelText, type RaId } from '../game/realm';
 
 const $ = <T extends HTMLElement = HTMLElement>(root: ParentNode, sel: string) => root.querySelector(sel) as T;
@@ -52,6 +53,7 @@ export class Hud {
         <div class="bar en" title="Endurance: sprinting and styles use it"><i></i><span></span></div>
         <div class="buffs"></div>
       </div>
+      <div id="party"></div>
       <div class="frame" id="tframe">
         <div class="fname"><span class="lvl"></span><span class="nm"></span></div>
         <div class="sub"></div>
@@ -317,6 +319,7 @@ export class Hud {
     if (this.lastSlow < 0.1) return;
     this.lastSlow = 0;
     this.frame($(this.root, '#pframe'), p, true);
+    this.partyFrames();
     const t = w.get(p.target);
     const tf = $(this.root, '#tframe');
     if (t && (!t.dead || t.kind === 'mob')) {
@@ -345,7 +348,7 @@ export class Hud {
     const pr = $(this.root, '#prompt');
     if (it) {
       pr.style.display = 'block';
-      pr.innerHTML = 'kind' in it ? `<b>F</b> Talk to ${it.name}` : `<b>F</b> Travel from ${it.site.name}`;
+      pr.innerHTML = 'portal' in it ? `<b>F</b> ${it.portal === 'enter' ? 'Enter' : 'Leave'} ${it.dungeon.name}` : 'kind' in it ? `<b>F</b> Talk to ${it.name}` : `<b>F</b> Travel from ${it.site.name}`;
     } else pr.style.display = 'none';
     // task tracker
     const tk = $(this.root, '#task');
@@ -361,6 +364,33 @@ export class Hud {
       tk.innerHTML = bits.join('<hr>');
     } else tk.style.display = 'none';
     this.drawMinimap();
+  }
+
+  /** Companions under the player frame; click one to target it (for heals). */
+  private partyFrames() {
+    const w = this.w, p = w.player!;
+    const pf = $(this.root, '#pframe');
+    const box = $(this.root, '#party');
+    box.style.top = `${pf.offsetTop + pf.offsetHeight + 6}px`;
+    const cs = w.companions().sort((a, b) => (a.slot ?? 0) - (b.slot ?? 0));
+    const key = cs.map((c) => c.id).join(',');
+    if (box.dataset.k !== key) {
+      box.dataset.k = key;
+      box.innerHTML = cs.map((c) => `<div class="pm" data-id="${c.id}"><div class="pmn"><b></b><small></small></div><div class="bar hp"><i></i></div><div class="bar pw"><i></i></div></div>`).join('');
+      box.querySelectorAll<HTMLElement>('.pm').forEach((el) => el.addEventListener('click', () => { p.target = +el.dataset.id!; }));
+    }
+    box.querySelectorAll<HTMLElement>('.pm').forEach((el) => {
+      const c = w.get(+el.dataset.id!);
+      if (!c) return;
+      el.classList.toggle('dead', c.dead);
+      el.classList.toggle('sel', p.target === c.id);
+      $(el, 'b').textContent = c.name;
+      $(el, 'small').textContent = c.dead ? 'Down' : `${c.level} ${CLASSES[c.cls!].name}`;
+      ($(el, '.hp i')).style.width = `${c.dead ? 0 : (c.hp / c.maxHp) * 100}%`;
+      const pw = $(el, '.pw');
+      pw.style.display = c.maxPower ? 'block' : 'none';
+      ($(pw, 'i')).style.width = `${c.maxPower ? (c.power / c.maxPower) * 100 : 0}%`;
+    });
   }
 
   private frame(el: HTMLElement, e: Entity, self: boolean) {
@@ -488,7 +518,14 @@ export class Hud {
     g.fillStyle = '#2a3a2a';
     g.fillRect(0, 0, S, S);
     const map = this.r.mapCanvas;
-    if (map) {
+    const dg = dungeonAt(p.x, p.z);
+    if (dg) {
+      // underground: the rooms, not the world
+      g.fillStyle = '#0c0b0a';
+      g.fillRect(0, 0, S, S);
+      g.fillStyle = '#5a554c';
+      for (const r of dg.rects) g.fillRect(S / 2 + (r.x0 - p.x) * scale, S / 2 + (r.z0 - p.z) * scale, (r.x1 - r.x0) * scale, (r.z1 - r.z0) * scale);
+    } else if (map) {
       const n = map.width;
       const k = n / (WORLD_R * 2);
       const sx = (p.x - span / 2 + WORLD_R) * k, sz = (p.z - span / 2 + WORLD_R) * k;
@@ -558,7 +595,7 @@ export class Hud {
 }
 
 function roleName(e: Entity) {
-  return e.role === 'merchant' ? 'Merchant' : e.role === 'teleporter' ? 'Porter' : e.role === 'healer' ? 'Healer' : e.role === 'taskmaster' ? 'Taskmaster' : 'Gatekeeper';
+  return e.role === 'merchant' ? 'Merchant' : e.role === 'teleporter' ? 'Porter' : e.role === 'healer' ? 'Healer' : e.role === 'taskmaster' ? 'Taskmaster' : e.role === 'captain' ? 'Captain' : 'Gatekeeper';
 }
 
 export function abilityTip(id: string, cls?: ClassId) {

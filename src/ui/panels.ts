@@ -1,9 +1,6 @@
 /** Windows: character, backpack, abilities, war map, NPC dialogue, help and the game menu. */
-import type { World } from '../game/world';
-import { moneyText, plural, dist } from '../game/world';
-import type { Entity } from '../game/types';
-import type { KeepState } from '../game/war';
-import { ABILITIES, CLASSES, STATS, STAT_NAMES, realmRank, RANK_TITLES, REALM_RANKS, xpToNext } from '../game/data';
+import { World, moneyText, plural, dist, type Interactable } from '../game/world';
+import { ABILITIES, CLASSES, ALL_ROLES, classFor, type Role, STATS, STAT_NAMES, realmRank, RANK_TITLES, REALM_RANKS, xpToNext } from '../game/data';
 import { REALM_DEFS, WORLD_R, SITES, FRONTIER_R, ROADS } from '../game/geo';
 import { SLOTS, SLOT_NAMES, RARITY_HEX, RARITY_NAMES, formatMoney, shopPrice, itemScore, type Item } from '../game/items';
 import type { Renderer } from '../render/scene';
@@ -24,7 +21,7 @@ export class Panels {
   private host: HTMLElement;
   open: Set<PanelId> = new Set();
   private els = new Map<PanelId, HTMLElement>();
-  private dialogWith: Entity | KeepState | null = null;
+  private dialogWith: Interactable | null = null;
   private shop = false;
   onQuit: () => void = () => {};
   onSettings: (k: string, v: boolean) => void = () => {};
@@ -363,6 +360,25 @@ export class Panels {
       g.fillText(r.name.toUpperCase(), x, y - 40);
     }
     // sites
+    // dungeon doors in your own realm
+    for (const en of w.entrances) {
+      if (en.dungeon.realm !== w.char!.realm) continue;
+      const [x, y] = toS(en.x, en.z);
+      g.fillStyle = '#1a1410';
+      g.strokeStyle = '#e8cf8f';
+      g.lineWidth = 2;
+      g.beginPath();
+      g.arc(x, y, 7, Math.PI, 0);
+      g.lineTo(x + 7, y + 6);
+      g.lineTo(x - 7, y + 6);
+      g.closePath();
+      g.fill();
+      g.stroke();
+      g.fillStyle = '#e8cf8f';
+      g.font = '12px Georgia, serif';
+      g.textAlign = 'center';
+      g.fillText(`${en.dungeon.name} (${en.dungeon.levels[0]}–${en.dungeon.levels[1]})`, x, y + 20);
+    }
     for (const s of SITES) {
       const [x, y] = toS(s.x, s.z);
       g.font = '13px Georgia, serif';
@@ -442,7 +458,7 @@ export class Panels {
 
   // ---------- dialogue ----------
 
-  talk(target: Entity | KeepState) {
+  talk(target: Interactable) {
     this.dialogWith = target;
     this.shop = false;
     if ('kind' in target && target.role === 'merchant') {
@@ -457,11 +473,28 @@ export class Panels {
     const t = this.dialogWith;
     if (!t) return;
     const isKeep = 'site' in t;
-    const el = this.panel('dialog', isKeep ? t.site.name : t.name, 'center');
+    const el = this.panel('dialog', 'portal' in t ? t.dungeon.name : isKeep ? t.site.name : t.name, 'center');
     const body = el.querySelector('.body')!;
     let html = '';
     const travel = () => w.travelOptions().map((o, i) => `<button class="opt" data-travel="${i}">${o.label}</button>`).join('') || '<p class="muted">Nowhere to go from here.</p>';
-    if (isKeep) {
+    if ('portal' in t) {
+      const d = t.dungeon;
+      const n = ch.party.length;
+      html = t.portal === 'enter'
+        ? `<p>${d.blurb}</p><p class="muted">Monsters of levels ${d.levels[0]}–${d.levels[1]}, two lieutenants and a boss. Built for a group of four: you have ${n ? `${n} companion${n > 1 ? 's' : ''}` : 'no companions'}${n < 3 ? ' (the Captain in town has more for hire)' : ''}. Every visit starts fresh.</p><button class="opt" data-dungeon="enter">Go in</button>`
+        : `<p>Daylight shows faintly up the stair.</p><p class="muted">Leaving resets ${d.name}: whatever you left alive will be waiting, and whatever you killed will be back.</p><button class="opt" data-dungeon="leave">Climb out</button>`;
+    } else if ('kind' in t && t.role === 'captain') {
+      const cost = World.hireCost(ch.level);
+      const roles = ALL_ROLES.map((r) => {
+        const c = CLASSES[classFor(ch.realm, r)];
+        return `<button class="opt" data-hire="${r}" ${ch.party.length >= 3 ? 'disabled' : ''}>Hire a ${c.name} <small class="muted">(${c.role})</small></button>`;
+      }).join('');
+      const party = ch.party.map((m, i) => `<div class="hireling"><span><b>${m.name}</b> the ${CLASSES[classFor(ch.realm, m.role)].name}</span><button data-dismiss="${i}">Dismiss</button></div>`).join('');
+      html = `<p>“Need blades at your back? Every one of mine is your level and goes where you go. ${moneyText(cost)} to sign one on, and they take a tenth of the coin you find.”</p>
+        ${party ? `<h4>Your company</h4>${party}` : ''}
+        ${ch.party.length < 3 ? `<h4>For hire (${3 - ch.party.length} more)</h4>${roles}` : '<p class="muted">Your company is full: three companions at most.</p>'}
+        <p class="muted">A group wants a tank to hold the monsters, a healer, and damage. Companions follow you, fight what you fight, and get back up once a fight is over.</p>`;
+    } else if (isKeep) {
       html = `<p>The banner of ${REALM_DEFS[ch.realm].name} flies over ${t.site.name}. A courier offers to take you along the realm's roads.</p>${travel()}`;
     } else if (t.role === 'teleporter' || t.role === 'gatekeeper') {
       html = t.role === 'teleporter'
@@ -505,6 +538,22 @@ export class Panels {
       }
       this.close('dialog');
     }));
+    body.querySelectorAll<HTMLButtonElement>('[data-dungeon]').forEach((b) => b.addEventListener('click', () => {
+      if (!('portal' in t)) return;
+      const why = b.dataset.dungeon === 'enter' ? w.enterDungeon(t.dungeon.id) : w.leaveDungeon();
+      if (why) w.log(why, 'error');
+      else sfx.cast('energy');
+      this.close('dialog');
+    }));
+    body.querySelectorAll<HTMLButtonElement>('[data-hire]').forEach((b) => b.addEventListener('click', () => {
+      const why = w.hire(b.dataset.hire as Role);
+      if (why) w.log(why, 'error'); else sfx.click();
+      this.dialogPanel();
+    }));
+    body.querySelectorAll<HTMLButtonElement>('[data-dismiss]').forEach((b) => b.addEventListener('click', () => {
+      w.dismiss(+b.dataset.dismiss!);
+      this.dialogPanel();
+    }));
     body.querySelector('[data-heal]')?.addEventListener('click', () => {
       p.hp = p.maxHp;
       p.power = p.maxPower;
@@ -540,6 +589,8 @@ export class Panels {
       </div><div>
       <h4>Levelling</h4>
       <p>Monsters are coloured by how tough they are compared to you: <span style="color:#9e9e9e">grey</span> (no reward), <span style="color:#4cd964">green</span>, <span style="color:#4aa3ff">blue</span>, <span style="color:#ffd84a">yellow</span> (even), <span style="color:#ff9f2e">orange</span>, <span style="color:#ff4b3e">red</span>, <span style="color:#c77dff">purple</span> (run). They get tougher the farther you go from town. The Taskmaster pays for culling them.</p>
+      <h4>Dungeons</h4>
+      <p>Each realm has a dungeon for a group of four, levels 13–18; its door is on the war map (<b>M</b>). Hire up to three companions from the <b>Captain</b> in town: a tank, a healer and damage make a good group. Click a companion's frame to target them.</p>
       <h4>The Frontier</h4>
       <p>The three realms fight over seven keeps in the middle of the world. Warbands march from each realm's gate, gather outside a keep, batter down its gate and kill its lord to take it. Join your realm's fights for realm points and rank: every realm level brings a point to spend on realm abilities (<b>L</b>). Talk to the Porter in town to reach your gate, and travel between the keeps your realm holds by standing at their banner and pressing <b>F</b>.</p>
       <p>Your hero saves itself to this browser as you play.</p>

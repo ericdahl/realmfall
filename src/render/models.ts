@@ -83,7 +83,7 @@ function lookOf(e: Entity): Look {
     const l = e.mob.look!;
     return {
       body: l.body, trim: l.trim, weapon: (l.weapon as Look['weapon']) ?? 'none', shield: false, helm: l.helm ? 'helm' : 'none',
-      skin: l.bones ? '#d9d2bc' : e.mob.id === 'troll' ? e.mob.color : skin, hair, bones: l.bones, bare: e.mob.id === 'troll',
+      skin: l.bones ? '#d9d2bc' : e.mob.id === 'troll' || l.bare ? e.mob.color : skin, hair, bones: l.bones, bare: e.mob.id === 'troll' || l.bare,
     };
   }
   const realm = e.realm === -1 ? null : REALM_DEFS[e.realm];

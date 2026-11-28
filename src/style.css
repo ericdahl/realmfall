@@ -74,6 +74,14 @@ em { color: #7dff9a; font-style: normal; }
 #hud #floaters, #hud #banner, #hud #prompt, #hud #tip { pointer-events: none; }
 .frame { position: absolute; top: 12px; width: 250px; padding: 8px 10px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; }
 #pframe { left: 12px; cursor: pointer; }
+#party { position: absolute; left: 12px; width: 250px; display: flex; flex-direction: column; gap: 4px; pointer-events: auto; }
+#party .pm { padding: 4px 8px 6px; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; cursor: pointer; }
+#party .pm.sel { border-color: var(--gold2); }
+#party .pm.dead { opacity: 0.5; }
+#party .pmn { display: flex; justify-content: space-between; font-size: 12px; }
+#party .pmn small { color: var(--muted); }
+#party .bar { height: 7px; margin-top: 2px; }
+#party .bar span { display: none; }
 #tframe { left: 274px; display: none; }
 .fname { font-family: Cinzel, Georgia, serif; font-size: 15px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .fname .lvl { display: inline-block; min-width: 24px; padding: 0 4px; margin-right: 6px; text-align: center; background: #000; border: 1px solid var(--line); border-radius: 3px; font-size: 13px; color: var(--ink); }
@@ -192,6 +200,7 @@ em { color: #7dff9a; font-style: normal; }
 .lhead .train { margin-left: auto; font-size: 12px; padding: 2px 8px; }
 .lhead .train:disabled { opacity: 0.4; cursor: default; }
 .ldesc { margin: 4px 6px 2px; font-size: 12px; }
+.hireling { display: flex; align-items: center; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid rgba(201,166,90,0.12); }
 .abil.ra { cursor: default; }
 .abil.ra[draggable="true"] { cursor: grab; }
 .abil.ra .rtext { flex: 1; }
