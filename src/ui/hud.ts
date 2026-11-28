@@ -10,6 +10,7 @@ import { sfx } from './audio';
 import { formatMoney } from '../game/items';
 import { ownerColor } from '../render/structures';
 import { LINES, freePoints, lineOf } from '../game/specs';
+import { REALM_ABILITIES, RA_BY_ID, raFree, raBlocked, realmLevelText, type RaId } from '../game/realm';
 
 const $ = <T extends HTMLElement = HTMLElement>(root: ParentNode, sel: string) => root.querySelector(sel) as T;
 
@@ -75,6 +76,7 @@ export class Hud {
         <button data-b="char" title="Character (C)">Character</button>
         <button data-b="bag" title="Backpack (I)">Bag</button>
         <button data-b="abilities" title="Abilities (K)">Abilities</button>
+        <button data-b="realm" title="Realm abilities (L)">Realm</button>
         <button data-b="map" title="War map (M)">Map</button>
         <button data-b="help" title="Help (F1)">Help</button>
         <button data-b="menu" title="Menu (Esc)">Menu</button>
@@ -331,8 +333,8 @@ export class Hud {
     const next = REALM_RANKS[rr + 1];
     ($(xpEl, 'b')).style.width = next ? `${((ch.rp - REALM_RANKS[rr]) / (next - REALM_RANKS[rr])) * 100}%` : '100%';
     $(xpEl, 'span').textContent = ch.level >= MAX_LEVEL
-      ? `Level ${ch.level} (max) · Realm rank ${rr + 1}: ${ch.rp} RP`
-      : `Level ${ch.level} · ${ch.xp.toLocaleString()} / ${need.toLocaleString()} xp · Realm rank ${rr + 1} · ${ch.rp} RP`;
+      ? `Level ${ch.level} (max) · Realm rank ${realmLevelText(ch.rp)}: ${ch.rp} RP`
+      : `Level ${ch.level} · ${ch.xp.toLocaleString()} / ${need.toLocaleString()} xp · Realm rank ${realmLevelText(ch.rp)} · ${ch.rp} RP`;
     $(this.root, '#money').textContent = formatMoney(ch.copper);
     // death
     const dd = $(this.root, '#death');
@@ -417,6 +419,10 @@ export class Hud {
       const canTrain = LINES[c.cls].some((l) => (c.specs[l.id] ?? 1) < c.level && free >= (c.specs[l.id] ?? 1) + 1);
       const btn = this.root.querySelector<HTMLElement>('#menubar [data-b="abilities"]');
       if (btn && btn.classList.contains('glow') !== canTrain) btn.classList.toggle('glow', canTrain);
+      const raFreePts = raFree(c.rp, c.ras);
+      const canBuy = REALM_ABILITIES.some((r) => !raBlocked(c.cls, r) && (c.ras[r.id] ?? 0) < r.costs.length && raFreePts >= r.costs[c.ras[r.id] ?? 0]);
+      const rb = this.root.querySelector<HTMLElement>('#menubar [data-b="realm"]');
+      if (rb && rb.classList.contains('glow') !== canBuy) rb.classList.toggle('glow', canBuy);
     }
     const w = this.w;
     const p = w.player!;
@@ -565,7 +571,8 @@ export function abilityTip(id: string, cls?: ClassId) {
   if (ab.range && ab.kind !== 'style') bits.push(`Range ${ab.range}m`);
   bits.push(ab.costType === 'endu' ? `${ab.cost} endurance` : `${ab.cost}% power`);
   const line = cls ? lineOf(cls, id) : undefined;
-  return `<b>${ab.name}</b> <small>${line ? `${line.name} ${ab.level}` : `level ${ab.level}`}</small><br><span class="meta">${bits.join(' · ')}</span><br>${ab.desc}`;
+  const where = RA_BY_ID[id as RaId] ? 'Realm ability' : line ? `${line.name} ${ab.level}` : `level ${ab.level}`;
+  return `<b>${ab.name}</b> <small>${where}</small><br><span class="meta">${bits.join(' · ')}</span><br>${ab.desc}`;
 }
 
 export { nm, KEEPS };

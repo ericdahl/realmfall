@@ -122,9 +122,9 @@ em { color: #7dff9a; font-style: normal; }
 #mm .coords { font-size: 12px; color: var(--muted); text-shadow: 0 1px 3px #000; }
 .mmbtns { position: absolute; top: 160px; right: -4px; display: flex; flex-direction: column; gap: 2px; }
 .mmbtns button { width: 24px; height: 24px; padding: 0; border-radius: 50%; line-height: 20px; }
-#menubar { position: absolute; right: 12px; bottom: 12px; display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; max-width: 300px; }
+#menubar { position: absolute; right: 12px; bottom: 12px; display: grid; grid-template-columns: repeat(4, auto); gap: 4px; justify-content: end; }
 #menubar button { font-size: 12px; padding: 4px 8px; }
-#money { position: absolute; right: 12px; bottom: 44px; font-weight: 700; color: var(--gold2); text-shadow: 0 1px 3px #000; }
+#money { position: absolute; right: 12px; bottom: 80px; font-weight: 700; color: var(--gold2); text-shadow: 0 1px 3px #000; }
 #task { position: absolute; right: 12px; top: 262px; width: 200px; padding: 6px 8px; background: rgba(10,8,6,0.6); border: 1px solid rgba(201,166,90,0.3); border-radius: 6px; font-size: 12px; display: none; }
 #task hr { border: 0; border-top: 1px solid rgba(201,166,90,0.3); margin: 6px 0; }
 .wb { position: relative; height: 13px; margin-top: 2px; background: #0a0806; border-radius: 2px; overflow: hidden; }
@@ -192,6 +192,12 @@ em { color: #7dff9a; font-style: normal; }
 .lhead .train { margin-left: auto; font-size: 12px; padding: 2px 8px; }
 .lhead .train:disabled { opacity: 0.4; cursor: default; }
 .ldesc { margin: 4px 6px 2px; font-size: 12px; }
+.abil.ra { cursor: default; }
+.abil.ra[draggable="true"] { cursor: grab; }
+.abil.ra .rtext { flex: 1; }
+.abil.ra .buy { font-size: 12px; padding: 2px 8px; white-space: nowrap; }
+.abil.ra .buy:disabled { opacity: 0.4; cursor: default; }
+.abil.ra.locked .buy { display: none; }
 #menubar button.glow { border-color: #7fe07a; box-shadow: 0 0 8px rgba(127,224,122,0.6); }
 .opt { display: block; width: 100%; text-align: left; margin: 6px 0; padding: 8px 12px; }
 .chk { display: flex; gap: 8px; align-items: center; margin: 8px 2px; }

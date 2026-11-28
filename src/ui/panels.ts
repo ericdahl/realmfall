@@ -13,8 +13,9 @@ import { abilityTip, type Hud } from './hud';
 import { sfx } from './audio';
 import { showNotes } from './title';
 import { LINES, freePoints, respecCost } from '../game/specs';
+import { REALM_ABILITIES, raFree, raBlocked, raText, raRespecCost, realmLevel, realmLevelText, type RaId, type RealmAbilityDef } from '../game/realm';
 
-export type PanelId = 'char' | 'bag' | 'abilities' | 'map' | 'dialog' | 'help' | 'menu';
+export type PanelId = 'char' | 'bag' | 'abilities' | 'realm' | 'map' | 'dialog' | 'help' | 'menu';
 
 export class Panels {
   private w: World;
@@ -67,7 +68,7 @@ export class Panels {
 
   close(id: PanelId) {
     this.open.delete(id);
-    if (id === 'abilities') this.respecArmed = false;
+    if (id === 'abilities' || id === 'realm') this.respecArmed = false;
     const el = this.els.get(id);
     if (el) el.style.display = 'none';
     if (id === 'dialog') this.dialogWith = null;
@@ -88,6 +89,7 @@ export class Panels {
     this.tick = 0;
     for (const id of this.open) if (id === 'char' || id === 'map') this.refresh(id);
     if (this.open.has('abilities') && this.w.char && this.w.char.level !== this.shownLevel) this.refresh('abilities');
+    if (this.open.has('realm') && this.w.char && realmLevel(this.w.char.rp).index !== this.shownRealm) this.refresh('realm');
     if (this.dialogWith && this.w.player && dist(this.w.player, 'site' in this.dialogWith ? this.dialogWith.site : this.dialogWith) > 12) this.close('dialog');
   }
 
@@ -96,6 +98,7 @@ export class Panels {
       case 'char': return this.charPanel();
       case 'bag': return this.bagPanel();
       case 'abilities': return this.abilityPanel();
+      case 'realm': return this.realmPanel();
       case 'map': return this.mapPanel();
       case 'dialog': return this.dialogPanel();
       case 'help': return this.helpPanel();
@@ -118,7 +121,7 @@ export class Panels {
     const absorb = Math.round((p.af / (p.af + 10 + 2 * p.level)) * 100);
     el.querySelector('.body')!.innerHTML = `
       <p class="lead" style="color:${REALM_DEFS[ch.realm].color}">Level ${ch.level} ${cls.name} of ${REALM_DEFS[ch.realm].name}</p>
-      <p class="muted">${RANK_TITLES[ch.realm][rr]} · realm rank ${rr + 1} · ${ch.rp.toLocaleString()} realm points${REALM_RANKS[rr + 1] ? ` (next at ${REALM_RANKS[rr + 1].toLocaleString()})` : ''}</p>
+      <p class="muted">${RANK_TITLES[ch.realm][rr]} · realm rank ${realmLevelText(ch.rp)} · ${ch.rp.toLocaleString()} realm points${REALM_RANKS[rr + 1] ? ` (next at ${REALM_RANKS[rr + 1].toLocaleString()})` : ''}</p>
       <div class="cols">
         <table class="stats">${rows}
           <tr><td>Hit points</td><td>${p.maxHp}</td></tr>
@@ -249,6 +252,66 @@ export class Panels {
         const slot = ch.hotbar.indexOf(null);
         const id = d.dataset.ab!;
         if (slot >= 0 && !ch.hotbar.includes(id) && p.abilities.includes(id)) ch.hotbar[slot] = id;
+      });
+    });
+  }
+
+  // ---------- realm abilities ----------
+
+  private shownRealm = -1;
+
+  private realmPanel() {
+    const w = this.w, ch = w.char!;
+    const el = this.panel('realm', 'Realm Abilities', 'left');
+    const body = el.querySelector('.body') as HTMLElement;
+    const scroll = body.scrollTop;
+    const lv = realmLevel(ch.rp);
+    this.shownRealm = lv.index;
+    const free = raFree(ch.rp, ch.ras);
+    const next = REALM_RANKS[lv.rank + 1];
+    const toNext = next === undefined ? '' : ` · next realm level at ${Math.ceil(REALM_RANKS[lv.rank] + ((lv.sub + 1) * (next - REALM_RANKS[lv.rank])) / 10).toLocaleString()} RP`;
+    const row = (ra: RealmAbilityDef) => {
+      const have = ch.ras[ra.id] ?? 0;
+      const max = ra.costs.length;
+      const blocked = raBlocked(ch.cls, ra);
+      const cost = have < max ? ra.costs[have] : 0;
+      const can = !blocked && have < max && free >= cost;
+      const now = have ? raText(ra, have) : '';
+      const then = have < max ? raText(ra, have + 1) : '';
+      const lvTxt = ra.kind === 'active' ? (have ? 'Learned' : 'Active') : `${have} / ${max}`;
+      const btn = blocked ? `<small class="muted">${blocked}</small>` : have >= max ? '<small class="muted">Max</small>' : `<button class="buy" data-ra="${ra.id}" ${can ? '' : 'disabled'}>${have ? '+' : 'Buy'} ${cost} pt${cost === 1 ? '' : 's'}</button>`;
+      const drag = ra.kind === 'active' && have ? `draggable="true" data-ab="${ra.id}"` : '';
+      return `<div class="abil ra ${blocked ? 'locked' : ''}" ${drag}><img src="${iconUrl(ra.icon, ra.school)}" alt=""><div class="rtext"><b>${ra.name}</b> <small>${lvTxt}</small><br><small>${now ? `Now: ${now}` : ''}${now && then ? '<br>' : ''}${then ? `${have ? 'Next' : ra.kind === 'active' ? '' : 'Level 1'}${have || ra.kind !== 'active' ? ': ' : ''}${then}` : ''}</small></div>${btn}</div>`;
+    };
+    const passives = REALM_ABILITIES.filter((r) => r.kind === 'passive').map(row).join('');
+    const actives = REALM_ABILITIES.filter((r) => r.kind === 'active').map(row).join('');
+    const cost = raRespecCost(ch.rp);
+    body.innerHTML = `<p class="muted">${RANK_TITLES[ch.realm][lv.rank]} · realm rank ${realmLevelText(ch.rp)} · ${ch.rp.toLocaleString()} RP${toNext}</p>
+      <div class="specbar"><span>Realm ability points: <b class="${free ? 'pts' : ''}">${free}</b></span><button class="respec ${this.respecArmed ? 'armed' : ''}">${this.respecArmed ? 'Click again to respec' : `Respec (${moneyText(cost)})`}</button></div>
+      <p class="muted">Every realm level (ten to a rank) brings a point. Earn realm points by killing enemy soldiers, guards and lords, and by being there when your realm takes a keep.</p>
+      <h4>Passive</h4>${passives}<h4>Active</h4><p class="muted">Drag a learned one onto the hotbar.</p>${actives}`;
+    body.scrollTop = scroll;
+    el.querySelectorAll<HTMLButtonElement>('.buy').forEach((b) => b.addEventListener('click', () => {
+      const why = w.buyRealmAbility(b.dataset.ra as RaId);
+      if (why) w.log(why, 'error'); else sfx.click();
+      this.respecArmed = false;
+      this.realmPanel();
+    }));
+    el.querySelector<HTMLButtonElement>('.respec')!.addEventListener('click', () => {
+      if (!this.respecArmed) { this.respecArmed = true; this.realmPanel(); return; }
+      this.respecArmed = false;
+      const why = w.respecRealm();
+      if (why) w.log(why, 'error');
+      this.realmPanel();
+    });
+    el.querySelectorAll<HTMLElement>('.abil[data-ab]').forEach((d) => {
+      d.addEventListener('dragstart', (e) => e.dataTransfer?.setData('text/ability', d.dataset.ab!));
+      d.addEventListener('mouseenter', () => this.hud.tip(abilityTip(d.dataset.ab!, ch.cls), d));
+      d.addEventListener('mouseleave', () => this.hud.tip(null));
+      d.addEventListener('dblclick', () => {
+        const slot = ch.hotbar.indexOf(null);
+        const id = d.dataset.ab!;
+        if (slot >= 0 && !ch.hotbar.includes(id)) ch.hotbar[slot] = id;
       });
     });
   }
@@ -470,14 +533,15 @@ export class Panels {
       <b>Right-drag</b> turns you with the camera (Q/E then strafe) · <b>Left-drag</b> looks around · <b>Both buttons</b> run · <b>Wheel</b> zoom</p>
       <h4>Fighting</h4>
       <p><b>Click</b> to target · <b>Tab</b> nearest enemy · <b>Esc</b> clear target · <b>Z</b> or right-click an enemy to start attacking<br>
-      <b>1–0</b> hotbar · <b>G</b> healing draught · <b>V</b> power draught · <b>F</b> talk / use</p>
+      <b>1–0</b> hotbar · <b>G</b> healing draught · <b>V</b> power draught · <b>F</b> talk / use<br>
+      <b>C</b> character · <b>I</b> backpack · <b>K</b> abilities and lines · <b>L</b> realm abilities · <b>M</b> war map</p>
       <p><b>Styles</b> (sword icons) replace your next swing. Some only work after a parry or block, from the side, or straight after another style; they glow on the bar when they are open.</p>
       <p><b>Spells and shots</b> take time. Moving, or being hit, ruins them. Root and snare your enemies, or use Focus.</p>
       </div><div>
       <h4>Levelling</h4>
       <p>Monsters are coloured by how tough they are compared to you: <span style="color:#9e9e9e">grey</span> (no reward), <span style="color:#4cd964">green</span>, <span style="color:#4aa3ff">blue</span>, <span style="color:#ffd84a">yellow</span> (even), <span style="color:#ff9f2e">orange</span>, <span style="color:#ff4b3e">red</span>, <span style="color:#c77dff">purple</span> (run). They get tougher the farther you go from town. The Taskmaster pays for culling them.</p>
       <h4>The Frontier</h4>
-      <p>The three realms fight over seven keeps in the middle of the world. Warbands march from each realm's gate, gather outside a keep, batter down its gate and kill its lord to take it. Join your realm's fights for realm points and rank. Talk to the Porter in town to reach your gate, and travel between the keeps your realm holds by standing at their banner and pressing <b>F</b>.</p>
+      <p>The three realms fight over seven keeps in the middle of the world. Warbands march from each realm's gate, gather outside a keep, batter down its gate and kill its lord to take it. Join your realm's fights for realm points and rank: every realm level brings a point to spend on realm abilities (<b>L</b>). Talk to the Porter in town to reach your gate, and travel between the keeps your realm holds by standing at their banner and pressing <b>F</b>.</p>
       <p>Your hero saves itself to this browser as you play.</p>
       </div></div>`;
   }

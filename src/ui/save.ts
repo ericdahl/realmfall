@@ -33,27 +33,31 @@ const OLD_LINES: Record<string, string[]> = {
 };
 
 /**
- * Brings an old hero up to date. Version 1 had no specialization lines: the hero gets its
- * class's usual build. Version 2 had four classes shared by every realm: the hero becomes its
- * realm's class of the same role, each line's level carried to the line in the same place.
- * Either way it gets a free respec.
+ * Brings an old hero up to date, a version at a time.
+ * Before 3 (version 1 had no specialization lines; version 2 had four classes shared by every
+ * realm): the hero becomes its realm's class of the same role, each line's level carried to the
+ * line in the same place (or the class's usual build), with a free respec.
+ * Before 4: no realm abilities yet.
  */
 export function migrateChar(c: CharSave) {
   if (c.version >= SAVE_VERSION) return;
-  const oldCls = c.cls as string;
-  const role = OLD_CLASS_ROLE[oldCls] ?? CLASSES[c.cls]?.arch ?? 'tank';
-  c.cls = classFor(c.realm, role);
-  if (c.specs && OLD_LINES[oldCls]) {
-    const old = c.specs;
-    c.specs = Object.fromEntries(LINES[c.cls].map((l, i) => [l.id, old[OLD_LINES[oldCls][i]] ?? 1]));
-  } else c.specs = autoSpec(c.cls, c.level, BUILDS[c.cls][0]);
-  c.freeRespec = true;
-  const known = knownAbilities(c.cls, c.specs);
-  c.hotbar = c.hotbar.map((a) => (a && known.includes(a) ? a : null));
-  for (const a of known) {
-    const free = c.hotbar.indexOf(null);
-    if (free >= 0 && !c.hotbar.includes(a)) c.hotbar[free] = a;
+  if (c.version < 3) {
+    const oldCls = c.cls as string;
+    const role = OLD_CLASS_ROLE[oldCls] ?? CLASSES[c.cls]?.arch ?? 'tank';
+    c.cls = classFor(c.realm, role);
+    if (c.specs && OLD_LINES[oldCls]) {
+      const old = c.specs;
+      c.specs = Object.fromEntries(LINES[c.cls].map((l, i) => [l.id, old[OLD_LINES[oldCls][i]] ?? 1]));
+    } else c.specs = autoSpec(c.cls, c.level, BUILDS[c.cls][0]);
+    c.freeRespec = true;
+    const known = knownAbilities(c.cls, c.specs);
+    c.hotbar = c.hotbar.map((a) => (a && known.includes(a) ? a : null));
+    for (const a of known) {
+      const free = c.hotbar.indexOf(null);
+      if (free >= 0 && !c.hotbar.includes(a)) c.hotbar[free] = a;
+    }
   }
+  if (c.version < 4) c.ras = {};
   c.version = SAVE_VERSION;
 }
 

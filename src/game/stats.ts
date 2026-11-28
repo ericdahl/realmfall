@@ -1,6 +1,7 @@
 import { CLASSES, ARMOR_MUL, WEAPONS, weaponDps, armorAf, mobHp, mobDps, STATS, type ClassId, type MobDef, type StatId } from './data';
 import type { Item, Slot } from './items';
 import type { Weapon } from './types';
+import { raValue, type RealmAbilities } from './realm';
 
 const SLOT_AF: Record<string, number> = { helm: 0.16, chest: 0.3, legs: 0.24, hands: 0.14, feet: 0.16 };
 
@@ -16,10 +17,14 @@ export interface Derived {
   shield: boolean;
 }
 
-export function classDerived(cls: ClassId, level: number, gear?: Partial<Record<Slot, Item>>): Derived {
+export function classDerived(cls: ClassId, level: number, gear?: Partial<Record<Slot, Item>>, ras?: RealmAbilities): Derived {
   const def = CLASSES[cls];
   const stats = {} as Record<StatId, number>;
   for (const s of STATS) stats[s] = def.base[s] + def.growth[s] * (level - 1);
+  stats.str += raValue(ras, 'aug_str');
+  stats.con += raValue(ras, 'aug_con');
+  stats.dex += raValue(ras, 'aug_dex');
+  if (def.powerStat) stats[def.powerStat] += raValue(ras, 'aug_acuity');
   let hpBonus = 0;
   let af = 0;
   let wdps = weaponDps(level, 0.93);
@@ -38,14 +43,14 @@ export function classDerived(cls: ClassId, level: number, gear?: Partial<Record<
   }
   af *= ARMOR_MUL[def.armor];
   const w = WEAPONS[def.weapon];
-  const maxHp = Math.round(50 + def.hpPerLevel * level + (stats.con - 40) * 2 + hpBonus);
+  const maxHp = Math.round((50 + def.hpPerLevel * level + (stats.con - 40) * 2 + hpBonus) * (1 + raValue(ras, 'toughness')));
   const ps = def.powerStat;
   const maxPower = ps ? Math.round(30 + level * 9 + (stats[ps] - 50) * 0.8) : 0;
   return {
     stats, maxHp, maxPower,
     weapon: { kind: def.weapon, dps: wdps, speed: w.speed, range: w.range, ranged: !!w.ranged },
     af,
-    parry: def.parry, block: def.block, evade: def.evade + Math.max(0, stats.dex - 50) / 1500,
+    parry: def.parry, block: def.block, evade: def.evade + Math.max(0, stats.dex - 50) / 1500 + raValue(ras, 'dodger'),
     shield: def.block > 0,
   };
 }

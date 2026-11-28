@@ -145,7 +145,8 @@ function boot() {
         case 'KeyF': interact(); return true;
         case 'KeyC': panels.toggle('char'); return true;
         case 'KeyI': case 'KeyB': panels.toggle('bag'); return true;
-        case 'KeyK': case 'KeyL': panels.toggle('abilities'); return true;
+        case 'KeyK': panels.toggle('abilities'); return true;
+        case 'KeyL': panels.toggle('realm'); return true;
         case 'KeyM': panels.toggle('map'); return true;
         case 'F1': case 'KeyH': panels.toggle('help'); return true;
         case 'KeyZ': world.toggleAttack(); return true;
@@ -156,7 +157,7 @@ function boot() {
     },
   });
   hud.onButton = (b) => {
-    if (b === 'char' || b === 'bag' || b === 'abilities' || b === 'map' || b === 'help' || b === 'menu') panels.toggle(b);
+    if (b === 'char' || b === 'bag' || b === 'abilities' || b === 'realm' || b === 'map' || b === 'help' || b === 'menu') panels.toggle(b);
   };
 
   const start = (c: CharSave) => {

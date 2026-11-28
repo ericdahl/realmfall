@@ -1,6 +1,7 @@
 import type { RealmId } from './geo';
 import type { BuffStat, ClassId, EffectDef, MobDef, StatId, WeaponKind } from './data';
 import type { Specs } from './specs';
+import type { RealmAbilities } from './realm';
 import type { Item, Slot } from './items';
 
 export type Team = RealmId | -1;
@@ -8,7 +9,7 @@ export type Kind = 'player' | 'mob' | 'soldier' | 'guard' | 'lord' | 'door' | 'n
 export type NpcRole = 'merchant' | 'teleporter' | 'healer' | 'taskmaster' | 'gatekeeper';
 
 export interface Effect {
-  type: 'stun' | 'root' | 'snare' | 'dot' | 'hot' | 'buff' | 'absorb' | 'focus' | 'taunt' | 'freedom' | 'thorns' | 'imbue';
+  type: 'stun' | 'root' | 'snare' | 'dot' | 'hot' | 'buff' | 'absorb' | 'focus' | 'taunt' | 'freedom' | 'thorns' | 'imbue' | 'purge';
   name: string;
   until: number;
   start: number;
@@ -111,6 +112,8 @@ export interface Entity {
   abilities: string[];
   /** specialization lines, for heroes, soldiers and guards */
   specs?: Specs;
+  /** realm abilities bought (the player's) */
+  ras?: RealmAbilities;
 }
 
 export interface Task {
@@ -137,6 +140,8 @@ export interface CharSave {
   specs: Specs;
   /** a free respec, given to heroes from before specialization lines */
   freeRespec?: boolean;
+  /** realm abilities bought, by level */
+  ras: RealmAbilities;
   equip: Record<Slot, Item>;
   bag: Item[];
   potions: { health: number; power: number };

@@ -22,7 +22,7 @@ URL options: `?seed=N` builds a different world (default 7), `?fps` shows the fr
 | Target | Click, `Tab` for the nearest enemy, `Esc` to clear |
 | Fight | `1`–`0` hotbar, `Z` or right-click an enemy to auto-attack, `G` healing draught, `V` power draught |
 | Talk / use | `F` (NPCs, soldiers of your realm, and the banner inside a keep your realm holds) |
-| Windows | `C` character, `I` backpack, `K` abilities and specialization (drag abilities to the hotbar), `M` war map, `F1` help |
+| Windows | `C` character, `I` backpack, `K` abilities and specialization (drag abilities to the hotbar), `L` realm abilities, `M` war map, `F1` help |
 
 ## The game
 
@@ -41,6 +41,8 @@ URL options: `?seed=N` builds a different world (default 7), `?fps` shows the fr
 **Specialization.** Each class has the three lines above. Each level brings 1.5 × that level in points; raising a line from n to n+1 costs n+1, and no line goes above your level. A line unlocks its abilities and sets their strength, so a level 20 hero can max one line and take another to 14, or spread out. Respec in the same window.
 
 **Stealth.** Stealthers can hide out of combat. A hidden enemy is invisible, off the minimap and untargetable until you come within its detect range: about 3.5 m at equal level, more if you out-level its Shadows line, and more again for other stealthers and keep guards. Attacking, casting or being hurt brings a stealther out; Ambush (from behind) and Garrote (a stun) only work from hiding, and Vanish hides even mid-fight.
+
+**Realm abilities.** Realm points come from killing enemy soldiers, guards and lords, and from being near when your realm takes a keep. Each of the ten realm ranks has ten realm levels (shown as 3L4), and every realm level is a point to spend in the Realm window (`L`): passives in five levels (Toughness, Augmented stats, Mastery of Arms, Magery or Healing, Determination, Avoidance of Magic, Dodger, Long Wind) and actives for the hotbar (Purge, Ignore Pain, Charge, Raging Power).
 
 **Levelling (1–20).** Monster camps get tougher the farther they are from town, and every monster's name is coloured by how it compares to you (grey, green, blue, yellow, orange, red, purple). Wolves call their packmates, brigands fight in gangs, bog sprites and mistcallers cast, trolls and treants slam, a few named monsters roam with better loot, and you can die. The Taskmaster pays for culling monsters, the Merchant sells potions and gear of your level, and loot drops with up to three bonuses. Other heroes of your realm level in the same fields and chatter in region chat.
 

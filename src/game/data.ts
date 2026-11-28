@@ -125,7 +125,8 @@ export type EffectDef =
   | { type: 'hot'; dur: number; value: number; name?: string } // heal coefficient per tick
   | { type: 'buff'; dur: number; stat: BuffStat; value: number; name: string }
   | { type: 'absorb'; dur: number; value: number; name?: string }
-  | { type: 'restore'; dur: 0; value: number } // endurance, at once
+  | { type: 'restore'; dur: 0; value: number; what?: 'endu' | 'hp' | 'power' } // at once: endurance in points, health and power as a share of the maximum
+  | { type: 'purge'; dur: 0 } // breaks stuns, roots, snares, damage over time and debuffs
   | { type: 'freedom'; dur: number } // clears and wards off snares and roots
   | { type: 'thorns'; dur: number; value: number } // share of melee damage taken that hurts the attacker
   | { type: 'hide'; dur: 0 } // step into the shadows (or out of them)
@@ -161,6 +162,8 @@ export interface AbilityDef {
   req?: { pos?: 'behind' | 'side'; after?: 'parry' | 'block' | 'evade'; follow?: string; shield?: boolean; stealth?: boolean };
   /** using it doesn't bring you out of hiding */
   keepsHidden?: boolean;
+  /** usable while stunned */
+  whileStunned?: boolean;
   effects?: EffectDef[];
   /** weapon damage that ignores armour */
   pierce?: boolean;
@@ -303,6 +306,12 @@ export const ABILITIES: Record<string, AbilityDef> = {
   rend: { id: 'rend', name: 'Rend', icon: 'claws', desc: 'Tears the target open; it bleeds for 12 seconds.', level: 5, kind: 'style', costType: 'endu', cost: 6, target: 'enemy', school: 'melee', bonus: 0.6, effects: [{ type: 'dot', dur: 12, value: 0.1 }] },
   howl: { id: 'howl', name: 'Howl', icon: 'warcry', desc: 'A howl that chills the blood: enemies within 10 m slow by 40% for 6 seconds.', level: 9, kind: 'instant', costType: 'endu', cost: 10, cd: 30, radius: 10, target: 'pbaoe', school: 'melee', effects: [{ type: 'snare', dur: 6, value: 0.4 }] },
   pounce: { id: 'pounce', name: 'Pounce', icon: 'pounce', desc: 'Leaps onto a target up to 20 m away and stuns it for 2 seconds.', level: 14, kind: 'instant', costType: 'endu', cost: 10, cd: 30, range: 20, target: 'enemy', school: 'melee', effects: [{ type: 'step', dur: 0 }, { type: 'stun', dur: 2 }] },
+
+  // Realm abilities (bought with realm ability points; see realm.ts)
+  purge: { id: 'purge', name: 'Purge', icon: 'purge', desc: 'Breaks every stun, root, snare, poison, bleed and curse on you. Works while stunned.', level: 1, kind: 'instant', costType: 'endu', cost: 0, cd: 600, target: 'self', school: 'holy', whileStunned: true, keepsHidden: true, effects: [{ type: 'purge', dur: 0 }] },
+  ignore_pain: { id: 'ignore_pain', name: 'Ignore Pain', icon: 'heart', desc: 'Heals 40% of your health at once.', level: 1, kind: 'instant', costType: 'endu', cost: 0, cd: 900, target: 'self', school: 'melee', keepsHidden: true, effects: [{ type: 'restore', dur: 0, value: 0.4, what: 'hp' }] },
+  charge: { id: 'charge', name: 'Charge', icon: 'boot', desc: 'Run 50% faster for 15 seconds, and nothing can slow or root you.', level: 1, kind: 'instant', costType: 'endu', cost: 0, cd: 300, target: 'self', school: 'melee', effects: [{ type: 'buff', dur: 15, stat: 'speed', value: 0.5, name: 'Charge' }, { type: 'freedom', dur: 15 }] },
+  raging_power: { id: 'raging_power', name: 'Raging Power', icon: 'surge', desc: 'Refills your power at once.', level: 1, kind: 'instant', costType: 'endu', cost: 0, cd: 900, target: 'self', school: 'energy', keepsHidden: true, effects: [{ type: 'restore', dur: 0, value: 1, what: 'power' }] },
 
   // Monster abilities
   bog_bolt: { id: 'bog_bolt', name: 'bog bolt', icon: 'frost', desc: '', level: 1, kind: 'spell', costType: 'power', cost: 0, cast: 2.4, range: 28, target: 'enemy', school: 'cold', power: [5, 3.2], effects: [{ type: 'snare', dur: 5, value: 0.3 }] },
