@@ -3,6 +3,7 @@
  * Pure functions of (x, z), no DOM. x runs east, z runs south (three.js convention).
  */
 import { fbm, smoothstep, lerp, clamp } from './noise';
+import { DUNGEON_X, DUNGEON_FLOOR, dungeonAt } from './dungeon';
 
 export type RealmId = 0 | 1 | 2;
 export const REALMS: RealmId[] = [0, 1, 2];
@@ -182,6 +183,7 @@ export class Geo {
   }
 
   height(x: number, z: number): number {
+    if (x > DUNGEON_X - 300) return DUNGEON_FLOOR; // dungeons: a flat stone floor, far past the world's edge
     let h = this.raw(x, z);
     for (const s of SITES) {
       const dx = x - s.x, dz = z - s.z;
@@ -205,6 +207,8 @@ export class Geo {
   }
 
   zoneAt(x: number, z: number): Zone {
+    const dg = dungeonAt(x, z);
+    if (dg) return { kind: 'dungeon', realm: dg.realm, name: dg.name, level: dg.levels[1] };
     const r = Math.hypot(x, z);
     if (r < FRONTIER_R) return { kind: 'frontier', realm: -1, name: 'The Frontier', level: 18 };
     const realm = sectorOf(x, z);
@@ -221,7 +225,7 @@ export class Geo {
 }
 
 export interface Zone {
-  kind: 'frontier' | 'home';
+  kind: 'frontier' | 'home' | 'dungeon';
   realm: RealmId | -1;
   name: string;
   level: number;

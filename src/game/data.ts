@@ -314,6 +314,14 @@ export const ABILITIES: Record<string, AbilityDef> = {
   raging_power: { id: 'raging_power', name: 'Raging Power', icon: 'surge', desc: 'Refills your power at once.', level: 1, kind: 'instant', costType: 'endu', cost: 0, cd: 900, target: 'self', school: 'energy', keepsHidden: true, effects: [{ type: 'restore', dur: 0, value: 1, what: 'power' }] },
 
   // Monster abilities
+  shadow_bolt: { id: 'shadow_bolt', name: 'shadow bolt', icon: 'void', desc: '', level: 1, kind: 'spell', costType: 'power', cost: 0, cast: 2.4, range: 28, target: 'enemy', school: 'void', power: [5, 3.4] },
+  spark_bolt: { id: 'spark_bolt', name: 'spark', icon: 'bolt', desc: '', level: 1, kind: 'spell', costType: 'power', cost: 0, cast: 2, range: 28, target: 'enemy', school: 'energy', power: [5, 3.2] },
+  dark_mend: { id: 'dark_mend', name: 'dark mending', icon: 'heart', desc: '', level: 1, kind: 'spell', costType: 'power', cost: 0, cast: 2.5, cd: 8, range: 25, target: 'ally', school: 'void', power: [10, 6], heal: true },
+  rush: { id: 'rush', name: 'rush', icon: 'pounce', desc: '', level: 1, kind: 'instant', costType: 'endu', cost: 0, cd: 20, range: 25, target: 'enemy', school: 'melee', effects: [{ type: 'step', dur: 0 }, { type: 'stun', dur: 1.5 }] },
+  strangle: { id: 'strangle', name: 'strangling vines', icon: 'vines', desc: '', level: 1, kind: 'instant', costType: 'endu', cost: 0, cd: 20, range: 18, target: 'enemy', school: 'nature', effects: [{ type: 'root', dur: 5 }] },
+  grave_cleave: { id: 'grave_cleave', name: 'grave cleave', icon: 'axe', desc: '', level: 1, kind: 'instant', costType: 'endu', cost: 0, cd: 15, radius: 7, target: 'pbaoe', school: 'void', power: [8, 3.5] },
+  strangling_roots: { id: 'strangling_roots', name: 'strangling roots', icon: 'vines', desc: '', level: 1, kind: 'instant', costType: 'endu', cost: 0, cd: 25, radius: 14, target: 'pbaoe', school: 'nature', power: [3, 1.5], effects: [{ type: 'root', dur: 4 }] },
+  frost_breath: { id: 'frost_breath', name: 'frost breath', icon: 'frost', desc: '', level: 1, kind: 'instant', costType: 'endu', cost: 0, cd: 15, radius: 11, target: 'pbaoe', school: 'cold', power: [7, 3], effects: [{ type: 'snare', dur: 6, value: 0.5 }] },
   bog_bolt: { id: 'bog_bolt', name: 'bog bolt', icon: 'frost', desc: '', level: 1, kind: 'spell', costType: 'power', cost: 0, cast: 2.4, range: 28, target: 'enemy', school: 'cold', power: [5, 3.2], effects: [{ type: 'snare', dur: 5, value: 0.3 }] },
   venom: { id: 'venom', name: 'venomous bite', icon: 'fangs', desc: '', level: 1, kind: 'style', costType: 'endu', cost: 0, target: 'enemy', school: 'melee', bonus: 0.2, effects: [{ type: 'dot', dur: 9, value: 0.08 }] },
   slam: { id: 'slam', name: 'ground slam', icon: 'stun', desc: '', level: 1, kind: 'instant', costType: 'endu', cost: 0, cd: 18, range: 5, target: 'enemy', school: 'melee', bonus: 0.6, effects: [{ type: 'stun', dur: 2 }] },
@@ -348,7 +356,17 @@ export interface MobDef {
   ranged?: boolean;
   caster?: boolean;
   flees?: boolean;
-  look?: { body: string; trim: string; weapon?: 'sword' | 'bow' | 'staff' | 'mace' | 'none'; helm?: boolean; bones?: boolean };
+  look?: { body: string; trim: string; weapon?: 'sword' | 'bow' | 'staff' | 'mace' | 'none'; helm?: boolean; bones?: boolean; bare?: boolean };
+  /** gets back up once, a few seconds after dying */
+  rises?: boolean;
+  /** bursts when it dies, hurting everything near */
+  explodes?: boolean;
+  /** hidden until you come close, like a stealther */
+  lurks?: boolean;
+  /** fights harder below 30% health */
+  enrage?: boolean;
+  /** only found in dungeons */
+  dungeon?: boolean;
 }
 
 export const MOBS: MobDef[] = [
@@ -367,9 +385,61 @@ export const MOBS: MobDef[] = [
   { id: 'troll', name: 'frost troll', shape: 'humanoid', color: '#7fa0a8', color2: '#3e5560', scale: 1.75, levels: [13, 19], realms: [2], hp: 1.55, dmg: 1.15, speed: 5.6, aggro: 12, weapon: 'fists', abilities: ['slam'], look: { body: '#5c7a83', trim: '#d8e4e8', weapon: 'none' } },
   { id: 'dire_wolf', name: 'dire wolf', shape: 'quadruped', variant: 'wolf', color: '#2f2a28', color2: '#6b5f58', scale: 1.25, levels: [12, 19], hp: 1.1, dmg: 1.1, speed: 7.2, aggro: 14, social: true, weapon: 'fangs' },
   { id: 'fallen', name: 'fallen knight', shape: 'humanoid', color: '#34363d', color2: '#6b1f24', scale: 1.1, levels: [14, 19], realms: [0], hp: 1.3, dmg: 1.15, speed: 6, aggro: 13, weapon: 'sword', armor: 1.3, look: { body: '#2c2e34', trim: '#6b1f24', weapon: 'sword', helm: true } },
+  // added with dungeons: each brings a behaviour of its own
+  { id: 'shore_crab', name: 'shore crab', shape: 'spider', color: '#b5532f', color2: '#e8a070', scale: 0.85, levels: [2, 8], hp: 1.1, dmg: 0.85, speed: 4.6, aggro: 0, weapon: 'claws', armor: 1.6 },
+  { id: 'storm_harpy', name: 'storm harpy', shape: 'sprite', color: '#9a7a52', color2: '#e0c88a', scale: 0.95, levels: [7, 13], realms: [0, 2], hp: 0.8, dmg: 0.95, speed: 6.5, aggro: 15, weapon: 'claws', caster: true, abilities: ['spark_bolt'] },
+  { id: 'brigand_chief', name: 'brigand chief', shape: 'humanoid', color: '#6b4f3a', color2: '#3b2f28', scale: 1.15, levels: [8, 14], hp: 1.35, dmg: 1.15, speed: 6.2, aggro: 14, weapon: 'sword', enrage: true, look: { body: '#3b2f28', trim: '#c9a23a', weapon: 'sword', helm: true } },
+  { id: 'ogre', name: 'hill ogre', shape: 'humanoid', color: '#9a8a62', color2: '#4a3a2a', scale: 1.6, levels: [10, 17], hp: 1.5, dmg: 1.2, speed: 5.8, aggro: 12, weapon: 'fists', abilities: ['rush'], look: { body: '#5a4a30', trim: '#3a2a1a', weapon: 'mace', bare: true } },
+  { id: 'skeleton', name: 'skeleton', shape: 'humanoid', color: '#d9d2bc', color2: '#3d3a36', scale: 1, levels: [6, 16], realms: [0], hp: 0.9, dmg: 1, speed: 5.6, aggro: 12, social: true, weapon: 'sword', rises: true, look: { body: '#2e2a26', trim: '#d9d2bc', weapon: 'sword', bones: true } },
+  { id: 'ghoul', name: 'ghoul', shape: 'humanoid', color: '#8a9a72', color2: '#2a2a20', scale: 0.95, levels: [8, 16], realms: [0], hp: 0.9, dmg: 1.05, speed: 7, aggro: 13, social: true, weapon: 'claws', abilities: ['venom'], look: { body: '#4a5440', trim: '#2a2a20', weapon: 'none', bare: true } },
+  { id: 'grave_caller', name: 'grave caller', shape: 'humanoid', color: '#4a3a56', color2: '#9a7ac0', scale: 1, levels: [10, 17], realms: [0], hp: 0.85, dmg: 0.9, speed: 6, aggro: 14, weapon: 'staff', caster: true, abilities: ['shadow_bolt', 'dark_mend'], look: { body: '#2a2030', trim: '#9a7ac0', weapon: 'staff' } },
+  { id: 'wisp', name: 'will-o’-wisp', shape: 'sprite', color: '#c8ecff', color2: '#5a9ad8', scale: 0.55, levels: [5, 15], realms: [1], hp: 0.6, dmg: 0.9, speed: 6.5, aggro: 12, weapon: 'spores', caster: true, explodes: true, abilities: ['spark_bolt'] },
+  { id: 'spriggan', name: 'spriggan', shape: 'treant', color: '#6b5030', color2: '#9fcf4a', scale: 0.95, levels: [9, 16], realms: [1], hp: 1.1, dmg: 1, speed: 5.4, aggro: 11, weapon: 'branch', abilities: ['strangle'] },
+  { id: 'ice_wraith', name: 'ice wraith', shape: 'sprite', color: '#eef6ff', color2: '#8ab8e0', scale: 1, levels: [10, 17], realms: [2], hp: 0.8, dmg: 1, speed: 6, aggro: 14, weapon: 'spores', caster: true, lurks: true, abilities: ['bog_bolt'] },
+  { id: 'ice_crawler', name: 'ice crawler', shape: 'spider', color: '#cfe4f0', color2: '#4a7a98', scale: 1.1, levels: [11, 17], realms: [2], hp: 1, dmg: 1, speed: 6.2, aggro: 10, weapon: 'fangs', abilities: ['venom'], armor: 1.2 },
+  { id: 'frost_giant', name: 'frost giant', shape: 'humanoid', color: '#a8c8d8', color2: '#e0eef4', scale: 2.2, levels: [16, 20], realms: [2], hp: 1.8, dmg: 1.25, speed: 5.4, aggro: 12, weapon: 'fists', abilities: ['slam'], dungeon: true, look: { body: '#5c7a8a', trim: '#e0eef4', weapon: 'none', bare: true } },
   { id: 'cultist', name: 'mistcaller', shape: 'humanoid', color: '#4a3a66', color2: '#a58bd6', scale: 1, levels: [9, 18], hp: 0.85, dmg: 0.9, speed: 6, aggro: 15, social: true, weapon: 'staff', caster: true, abilities: ['bog_bolt'], look: { body: '#3e2f5c', trim: '#a58bd6', weapon: 'staff' } },
 ];
 export const MOB_BY_ID = Object.fromEntries(MOBS.map((m) => [m.id, m]));
+
+/** Dungeon mini-bosses and bosses: a monster made bigger and given a script. */
+export interface BossDef {
+  id: string;
+  name: string;
+  mob: string;
+  scale: number;
+  hpMul: number;
+  dmgMul: number;
+  abilities: string[];
+  /** at these shares of health, call adds */
+  summons?: { at: number; mob: string; n: number; say: string }[];
+  /** below this share of health, hits harder and moves faster */
+  enrageAt?: number;
+  /** said on the first blow */
+  say?: string;
+  boss?: boolean;
+}
+
+export const BOSSES: Record<string, BossDef> = {
+  sexton_mord: { id: 'sexton_mord', name: 'Sexton Mord', mob: 'grave_caller', scale: 1.3, hpMul: 5, dmgMul: 0.9, abilities: ['shadow_bolt', 'dark_mend'], summons: [{ at: 0.5, mob: 'skeleton', n: 2, say: 'Up, my children! Up!' }], say: 'More bones for the barrow.' },
+  lady_ashgrave: { id: 'lady_ashgrave', name: 'Lady Ashgrave', mob: 'wight', scale: 1.4, hpMul: 6, dmgMul: 0.9, abilities: ['dread', 'grave_cleave'], enrageAt: 0.25, say: 'You walk on my husband’s grave.' },
+  barrow_king: {
+    id: 'barrow_king', name: 'The Barrow King', mob: 'fallen', scale: 1.8, hpMul: 8, dmgMul: 0.7, abilities: ['grave_cleave'], boss: true, enrageAt: 0.2, say: 'Kneel to your king!',
+    summons: [{ at: 0.66, mob: 'skeleton', n: 2, say: 'Rise, my guard!' }, { at: 0.33, mob: 'skeleton', n: 2, say: 'To me, my dead!' }],
+  },
+  mother_thistle: { id: 'mother_thistle', name: 'Mother Thistle', mob: 'spriggan', scale: 1.5, hpMul: 6, dmgMul: 0.9, abilities: ['strangle', 'slam'], enrageAt: 0.3, say: 'Mind the thorns, little ones.' },
+  gloamwing: { id: 'gloamwing', name: 'Gloamwing', mob: 'wisp', scale: 1.6, hpMul: 9, dmgMul: 0.9, abilities: ['spark_bolt'], summons: [{ at: 0.6, mob: 'wisp', n: 2, say: 'The Gloamwing flickers and splits!' }, { at: 0.3, mob: 'wisp', n: 3, say: 'The Gloamwing flickers and splits!' }] },
+  the_rotheart: {
+    id: 'the_rotheart', name: 'The Rotheart', mob: 'treant', scale: 2.5, hpMul: 9, dmgMul: 0.8, abilities: ['strangling_roots', 'slam'], boss: true, enrageAt: 0.25, say: 'Root and rot, root and rot…',
+    summons: [{ at: 0.66, mob: 'wisp', n: 2, say: 'Lights gather in the dark around the Rotheart!' }, { at: 0.33, mob: 'spriggan', n: 2, say: 'The Rotheart’s children tear free of its bark!' }],
+  },
+  skadis_hound: { id: 'skadis_hound', name: 'Skadi’s Hound', mob: 'ice_wolf', scale: 1.9, hpMul: 6, dmgMul: 0.9, abilities: ['rush'], enrageAt: 0.3 },
+  pale_seer: { id: 'pale_seer', name: 'The Pale Seer', mob: 'ice_wraith', scale: 1.4, hpMul: 6, dmgMul: 0.9, abilities: ['bog_bolt', 'dread'], summons: [{ at: 0.5, mob: 'ice_wraith', n: 2, say: 'The cold has more eyes than you know.' }], say: 'I saw you coming.' },
+  hrimthurs: {
+    id: 'hrimthurs', name: 'Hrimthurs', mob: 'frost_giant', scale: 2.6, hpMul: 9, dmgMul: 0.8, abilities: ['frost_breath', 'slam'], boss: true, enrageAt: 0.25, say: 'Who wakes Hrimthurs?',
+    summons: [{ at: 0.5, mob: 'ice_wraith', n: 2, say: 'Hrimthurs bellows, and the walls of ice crack open!' }],
+  },
+};
 
 /** Unique, rarely seen monsters with better loot. */
 export const NAMED: { mob: string; name: string; realm?: RealmId }[] = [

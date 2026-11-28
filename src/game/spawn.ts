@@ -15,9 +15,10 @@ export function populate(w: World) {
       ['teleporter', 'Porter'],
       ['healer', 'Healer'],
       ['taskmaster', 'Taskmaster'],
+      ['captain', 'Captain'],
     ];
     roles.forEach(([role, title], i) => {
-      const a = town.facing + (i - 1.5) * 0.55;
+      const a = town.facing + (i - 2) * 0.5;
       const x = town.x + Math.cos(a) * 14, z = town.z + Math.sin(a) * 14;
       const nm = `${realmName(r.id, () => rng.next())} the ${title}`;
       w.add(w.makeNpc(role, nm, r.id, x, z, a + Math.PI));
@@ -48,9 +49,10 @@ export function populate(w: World) {
       if (Math.abs(Math.hypot(x, z) - GATE_R) < 40 && dt > 300) continue;
       if (roadDist(x, z) < 10) continue;
       if (camps.some((c) => Math.hypot(c.x - x, c.z - z) < 40)) continue;
+      if (w.entrances.some((en) => Math.hypot(en.x - x, en.z - z) < 30)) continue;
       camps.push({ x, z });
       const lvl = Math.max(1, Math.min(19, homeLevel(dt) + rng.int(-1, 1)));
-      const opts = MOBS.filter((m) => m.levels[0] <= lvl && m.levels[1] >= lvl && (!m.realms || m.realms.includes(r.id)));
+      const opts = MOBS.filter((m) => m.levels[0] <= lvl && m.levels[1] >= lvl && (!m.realms || m.realms.includes(r.id)) && !m.dungeon);
       if (!opts.length) continue;
       const def: MobDef = rng.weighted(opts, (m) => (m.realms ? 2.2 : 1));
       const named = NAMED.filter((n) => n.mob === def.id && (n.realm === undefined || n.realm === r.id));

@@ -3,10 +3,10 @@
  * No DOM. The renderer and UI read `entities`, `keeps`, and drain `events` and `logs`.
  */
 import { Rng } from './rng';
-import { Geo, REALM_DEFS, KEEPS, siteById, KEEP_HALF, FRONTIER_R, type RealmId, type Site } from './geo';
+import { Geo, REALM_DEFS, KEEPS, siteById, KEEP_HALF, FRONTIER_R, homeLevel, roadDist, type RealmId, type Site } from './geo';
 import {
   ABILITIES, CLASSES, MOB_BY_ID, WEAPONS, RUN_SPEED, SPRINT_SPEED, MAX_LEVEL, xpToNext, mobXp, conColor, CON_XP,
-  realmRank, RANK_TITLES, classFor, type AbilityDef, type ClassId, type MobDef, type EffectDef, type BuffStat,
+  realmRank, RANK_TITLES, classFor, realmName, BOSSES, type BossDef, type Role, type AbilityDef, type ClassId, type MobDef, type EffectDef, type BuffStat,
 } from './data';
 import { classDerived, mobDerived } from './stats';
 import { makeItem, potion, starterKit, SLOTS, shopPrice, type Item } from './items';
@@ -15,12 +15,20 @@ import { thinkMob, thinkCombatant } from './ai';
 import { War, type KeepState } from './war';
 import { populate } from './spawn';
 import { clamp } from './noise';
+import { DUNGEONS, DUNGEON_X, dungeonAt, dungeonById, walkable, los as dungeonLos, route as dungeonRoute, startOf, type DungeonDef } from './dungeon';
 import { raValue, raActives, raFree, raBlocked, raCost, raRespecCost, RA_BY_ID, type RaId } from './realm';
 import { LINES, BUILDS, autoSpec, baseSpecs, knownAbilities, lineOf, passiveFrac, freePoints, pointsForLevel, respecCost } from './specs';
 
-/** 2: specialization lines (`specs`). 3: a class for each realm (`cls`). 4: realm abilities (`ras`). */
-export const SAVE_VERSION = 4;
+/** 2: specialization lines (`specs`). 3: a class for each realm (`cls`). 4: realm abilities (`ras`). 5: companions (`party`). */
+export const SAVE_VERSION = 5;
+/** A dungeon's door outside, or the way out inside. */
+export interface Portal { portal: 'enter' | 'leave'; dungeon: DungeonDef; x: number; z: number }
+export type Interactable = Entity | KeepState | Portal;
+
 export const TICK = 1 / 20;
+/** XP kept with 0 to 3 companions along */
+const GROUP_XP = [1, 0.9, 0.8, 0.7];
+const mobDpsOf = (lvl: number) => 1.4 + lvl * 1.7;
 
 export interface Segment { ax: number; az: number; bx: number; bz: number; door?: number }
 export interface Circle { x: number; z: number; r: number }
@@ -65,6 +73,11 @@ export class World {
   houses: { x: number; z: number; w: number; d: number; rot: number; realm: RealmId }[] = [];
   war: War;
   keeps: KeepState[] = [];
+  /** where each realm's dungeon opens in its home region */
+  entrances: { dungeon: DungeonDef; x: number; z: number; facing: number }[] = [];
+  /** the dungeon whose monsters are spawned (one at a time: the player's) */
+  instance: string | null = null;
+  private rising: { id: number; at: number }[] = [];
   private grid = new Map<number, Entity[]>();
   private secondTimer = 0;
   private chatTimer = 30;
@@ -78,6 +91,7 @@ export class World {
     this.headless = !!opts.headless;
     this.war = new War(this);
     this.buildStatics();
+    this.entrances = DUNGEONS.map((d) => ({ dungeon: d, ...this.findEntrance(d.realm) }));
     if (opts.populate !== false) populate(this);
   }
 
@@ -124,6 +138,21 @@ export class World {
         for (let j = 0; j < 4; j++) this.segments.push({ ax: q[j].x, az: q[j].z, bx: q[(j + 1) % 4].x, bz: q[(j + 1) % 4].z });
       }
     }
+  }
+
+  /** A flat spot about level 13's distance from town, off the road, for the dungeon's door. */
+  private findEntrance(realm: RealmId) {
+    const town = siteById(`town${realm}`);
+    const d = 60 + 12 * 27;
+    for (let i = 0; i < 40; i++) {
+      const a = town.facing + (i % 2 ? 1 : -1) * (0.35 + Math.floor(i / 2) * 0.05);
+      const x = town.x + Math.cos(a) * d, z = town.z + Math.sin(a) * d;
+      if (this.geo.ridge(x, z) < 0.06 && this.geo.height(x, z) > 1.5 && roadDist(x, z) > 16 && Math.abs(homeLevel(Math.hypot(x - town.x, z - town.z)) - 13) <= 1) {
+        return { x, z, facing: Math.atan2(town.z - z, town.x - x) };
+      }
+    }
+    const a = town.facing + 0.5;
+    return { x: town.x + Math.cos(a) * d, z: town.z + Math.sin(a) * d, facing: a + Math.PI };
   }
 
   keepToWorld(site: Site, u: number, v: number) {
@@ -189,21 +218,25 @@ export class World {
     return e;
   }
 
-  makeMob(def: MobDef, level: number, x: number, z: number, named?: string): Entity {
-    const e = this.baseEntity('mob', named ?? def.name, -1, level, x, z);
+  makeMob(def: MobDef, level: number, x: number, z: number, named?: string, opts: { rank?: 'elite'; boss?: BossDef } = {}): Entity {
+    const b = opts.boss;
+    const e = this.baseEntity('mob', b?.name ?? named ?? def.name, -1, level, x, z);
     e.mob = def;
-    e.named = !!named;
-    e.hpMul = named ? 2.6 : 1;
-    e.dmgMul = named ? 1.25 : 1;
-    e.scale = def.scale * (named ? 1.2 : 1);
+    e.named = !!named || !!b;
+    e.hpMul = b ? b.hpMul : named ? 2.6 : opts.rank === 'elite' ? 1.8 : 1;
+    e.dmgMul = b ? b.dmgMul : named ? 1.25 : opts.rank === 'elite' ? 1.1 : 1;
+    e.scale = b ? b.scale : def.scale * (named ? 1.2 : 1);
+    if (b) { e.boss = b.id; e.rank = b.boss ? 'boss' : 'mini'; e.phase = 0; }
+    else if (opts.rank) e.rank = opts.rank;
     e.radius = 0.5 * e.scale + 0.1;
     e.speed = def.speed;
     const d = mobDerived(def, level, e.hpMul);
     Object.assign(e, { stats: d.stats, maxHp: d.maxHp, maxPower: d.maxPower, weapon: d.weapon, af: d.af, parry: d.parry, block: d.block, evade: d.evade, shield: d.shield });
     e.hp = e.maxHp;
     e.power = e.maxPower;
-    e.abilities = def.abilities ?? [];
+    e.abilities = b?.abilities ?? def.abilities ?? [];
     if (def.look) e.look = def.look;
+    if (def.lurks) e.stealthed = true;
     return e;
   }
 
@@ -255,7 +288,7 @@ export class World {
     knownAbilities(cls, specs).forEach((a, i) => (hotbar[i] = a));
     return {
       version: SAVE_VERSION, id: `${Date.now().toString(36)}${Math.floor(rng.next() * 1e6).toString(36)}`,
-      name, realm, cls, level: 1, xp: 0, copper: 150, rp: 0, specs, ras: {},
+      name, realm, cls, level: 1, xp: 0, copper: 150, rp: 0, specs, ras: {}, party: [],
       equip: starterKit(rng, cls), bag: [], potions: { health: 3, power: CLASSES[cls].powerStat ? 2 : 0 },
       hotbar, x: town.x + Math.cos(town.facing) * 8, z: town.z + Math.sin(town.facing) * 8,
       kills: 0, realmKills: 0, deaths: 0, task: null, created: Date.now(), played: 0,
@@ -276,6 +309,14 @@ export class World {
     const town = siteById(`town${char.realm}`);
     e.facing = Math.atan2(town.z - char.z, town.x - char.x) + Math.PI;
     this.add(e);
+    // a hero saved inside a dungeon wakes at its door
+    const dg = dungeonAt(e.x, e.z);
+    if (dg) {
+      const en = this.entrances.find((x) => x.dungeon === dg)!;
+      e.x = en.x + Math.cos(en.facing) * 6;
+      e.z = en.z + Math.sin(en.facing) * 6;
+    }
+    char.party.forEach((_, i) => this.spawnCompanion(i));
     return e;
   }
 
@@ -339,6 +380,7 @@ export class World {
     return true;
   }
   friendly(a: Entity, b: Entity) {
+    if (a.kind === 'mob' && b.kind === 'mob') return !a.dead && !b.dead;
     return !a.dead && !b.dead && a.realm === b.realm && a.realm !== -1 && b.kind !== 'door' && b.kind !== 'npc';
   }
 
@@ -370,9 +412,10 @@ export class World {
       const pt = this.get(p.target);
       if (pt && !this.canSee(p, pt)) { p.target = null; p.attacking = false; }
     }
+    if (this.rising.length) this.raiseTheDead();
     for (const e of this.list.slice()) {
       if (e.dead) {
-        if (e.kind !== 'player' && e.kind !== 'door' && this.t - e.deadAt > (e.kind === 'mob' ? 24 : 16)) {
+        if (e.kind !== 'player' && e.kind !== 'door' && e.kind !== 'companion' && this.t - e.deadAt > (e.kind === 'mob' ? 24 : 16)) {
           this.remove(e);
           if (e.kind === 'mob' && e.respawn != null) this.war.scheduleRespawn(e);
         }
@@ -445,6 +488,7 @@ export class World {
       if (e.kind === 'mob' && e.ai.mode === 'return') e.hp = Math.min(e.maxHp, e.hp + e.maxHp * 0.2);
     }
     this.war.everySecond();
+    this.reviveCompanions();
     if (this.char && this.player) {
       this.char.played += 1;
       this.char.x = this.player.x;
@@ -498,6 +542,20 @@ export class World {
 
   moveBy(e: Entity, dx: number, dz: number) {
     let nx = e.x + dx, nz = e.z + dz;
+    const dg = e.x > DUNGEON_X - 300 ? dungeonAt(e.x, e.z) : undefined;
+    if (dg) {
+      // slide along the walls; anyone somehow outside them may move anywhere to get back in
+      const r = e.radius;
+      if (walkable(dg, e.x, e.z, r) && !walkable(dg, nx, nz, r)) {
+        if (walkable(dg, nx, e.z, r)) nz = e.z;
+        else if (walkable(dg, e.x, nz, r)) nx = e.x;
+        else { nx = e.x; nz = e.z; }
+      }
+      e.moved += Math.hypot(nx - e.x, nz - e.z);
+      e.x = nx;
+      e.z = nz;
+      return;
+    }
     if (e.kind === 'player') {
       const h0 = this.geo.height(e.x, e.z), h1 = this.geo.height(nx, nz);
       const step = Math.hypot(dx, dz);
@@ -548,6 +606,10 @@ export class World {
 
   /** Next waypoint on the way to (tx, tz): through a keep's gate if the walls are in the way. */
   route(e: Entity, tx: number, tz: number): { x: number; z: number } {
+    if (e.x > DUNGEON_X - 300) {
+      const dg = dungeonAt(e.x, e.z);
+      if (dg) return dungeonRoute(dg, e.x, e.z, tx, tz);
+    }
     for (const k of this.keeps) {
       const s = k.site;
       if (Math.abs(e.x - s.x) > 90 && Math.abs(tx - s.x) > 90) continue;
@@ -836,6 +898,14 @@ export class World {
     return dist(viewer, e) <= this.detectRange(viewer, e);
   }
 
+  /** Can a see b through the walls? Only dungeons have walls that block sight. */
+  los(a: { x: number; z: number }, b: { x: number; z: number }) {
+    if (a.x < DUNGEON_X - 300 && b.x < DUNGEON_X - 300) return true;
+    const da = dungeonAt(a.x, a.z), db = dungeonAt(b.x, b.z);
+    if (da !== db) return false;
+    return !da || dungeonLos(da, a.x, a.z, b.x, b.z);
+  }
+
   hide(e: Entity) {
     e.stealthed = true;
     e.attacking = false;
@@ -941,7 +1011,9 @@ export class World {
 
   private pullSocial(m: Entity, attacker: Entity) {
     this.near(m.x, m.z, 12, (o) => {
-      if (o.kind === 'mob' && !o.dead && o.mob?.id === m.mob?.id && (o.ai.mode === 'idle' || o.ai.mode === 'wander')) {
+      // a pack in a dungeon comes as one; in the wild, only their own kind
+      const kin = m.dungeon ? o.dungeon === m.dungeon : o.mob?.id === m.mob?.id;
+      if (o.kind === 'mob' && !o.dead && kin && (o.ai.mode === 'idle' || o.ai.mode === 'wander') && this.los(m, o)) {
         o.ai.mode = 'combat';
         o.target = attacker.id;
         o.threat.set(attacker.id, 1);
@@ -965,7 +1037,9 @@ export class World {
     d.lastHurt = this.t;
     d.lastCombat = this.t;
     a.lastCombat = this.t;
-    d.threat.set(a.id, (d.threat.get(a.id) ?? 0) + amount);
+    // tanks draw far more attention than they deal in damage
+    const threat = a.cls && CLASSES[a.cls].arch === 'tank' ? 2.5 : 1;
+    d.threat.set(a.id, (d.threat.get(a.id) ?? 0) + amount * threat);
     d.dmgBy.set(a.id, (d.dmgBy.get(a.id) ?? 0) + amount);
     this.events.push({ type: 'dmg', id: d.id, src: a.id, amount, crit, school, result });
     if (school === 'bleed') {
@@ -1027,6 +1101,7 @@ export class World {
     if (ab.costType === 'endu' && e.endu < ab.cost) return 'You are too fatigued!';
     if (abId === 'stealth' && !e.stealthed && this.t - e.lastCombat < 5) return 'You can’t hide in the middle of a fight!';
     if (target && target !== e && this.hostile(e, target) && !this.canSee(e, target)) return 'You can’t see your target!';
+    if (target && target !== e && !this.los(e, target)) return 'Your target is not in view!';
     if (ab.costType === 'power' && e.maxPower > 0 && e.power < (ab.cost / 100) * e.maxPower) return 'You don’t have enough power!';
     if (ab.target === 'enemy' || ab.target === 'enemyAoe') {
       if (!target || target.dead) return 'You need a target!';
@@ -1208,7 +1283,80 @@ export class World {
     }
     if (d.kind === 'door') this.war.breached(d);
     if (d.kind === 'lord') this.war.lordSlain(d, a);
-    if (p && !p.dead) this.reward(d, a);
+    if (d.mob?.explodes) this.burst(d);
+    if (d.mob?.rises && !d.rose) this.rising.push({ id: d.id, at: this.t + 3 });
+    if (d.rank === 'boss' && p) this.log(`${d.name} is defeated!`, 'realm');
+    if (p && !p.dead && !d.rose) this.reward(d, a);
+  }
+
+  /** Wisps and the like burst when they die, hurting everything hostile near them. */
+  private burst(d: Entity) {
+    const amount = Math.round(mobDpsOf(d.level) * 2.5 * d.dmgMul);
+    this.events.push({ type: 'aoe', x: d.x, z: d.z, r: 6, school: 'energy', id: d.id });
+    if (this.player && dist(this.player, d) < 40) this.log(`${capNm(d)} bursts in a flash of light!`, 'hit-in');
+    // (hostile() says no to the dead, so check by hand)
+    this.near(d.x, d.z, 6, (o) => { if (!o.dead && o.kind !== 'door' && o.kind !== 'npc' && !o.invulnerable && o.realm !== d.realm && this.los(d, o)) this.damage(o, d, amount, 'energy', false, 'hit'); });
+  }
+
+  /** Skeletons pull themselves back together, once. */
+  private raiseTheDead() {
+    for (const r of this.rising.slice()) {
+      if (this.t < r.at) continue;
+      this.rising.splice(this.rising.indexOf(r), 1);
+      const d = this.get(r.id);
+      if (!d || !d.dead || !d.mob) continue;
+      const m = this.makeMob(d.mob, d.level, d.x, d.z, undefined, { rank: d.rank === 'elite' ? 'elite' : undefined });
+      m.rose = true;
+      m.hp = Math.round(m.maxHp * 0.5);
+      m.dungeon = d.dungeon;
+      m.respawn = undefined;
+      m.facing = d.facing;
+      this.remove(d);
+      if (d.respawn != null) this.war.scheduleRespawn(d);
+      this.add(m);
+      if (this.player && dist(this.player, m) < 50) this.log(`The ${m.name} pulls itself back together!`, 'system');
+      const foe = this.player && !this.player.dead && dist(this.player, m) < 30 ? this.player : null;
+      if (foe) { m.ai.mode = 'combat'; m.target = foe.id; m.threat.set(foe.id, 1); }
+    }
+  }
+
+  /** Mini-bosses and bosses call adds and enrage at set shares of their health; so do some field monsters. */
+  bossTick(e: Entity) {
+    const frac = e.hp / e.maxHp;
+    const b = e.boss ? BOSSES[e.boss] : undefined;
+    if (b?.summons) {
+      b.summons.forEach((s, i) => {
+        if (frac > s.at || (e.phase! & (1 << i))) return;
+        e.phase! |= 1 << i;
+        this.say(e, s.say);
+        for (let k = 0; k < s.n; k++) {
+          const a = (k / s.n) * Math.PI * 2;
+          let x = e.x + Math.cos(a) * 5, z = e.z + Math.sin(a) * 5;
+          const dg = dungeonAt(e.x, e.z);
+          if (dg && !walkable(dg, x, z, 0.8)) { x = e.x; z = e.z; }
+          const m = this.makeMob(MOB_BY_ID[s.mob], Math.max(1, e.level - 3), x, z);
+          m.dungeon = e.dungeon;
+          m.rose = true; // summoned dead stay down
+          m.ai.mode = 'combat';
+          m.target = e.target;
+          if (e.target != null) m.threat.set(e.target, 1);
+          this.add(m);
+        }
+      });
+    }
+    const at = b?.enrageAt ?? (e.mob?.enrage ? 0.3 : 0);
+    if (!e.enraged && frac < at) {
+      e.enraged = true;
+      e.dmgMul *= 1.5;
+      e.speed *= 1.2;
+      if (this.player && dist(this.player, e) < 60) this.log(`${capNm(e)} flies into a rage!`, 'hit-in');
+      this.events.push({ type: 'buff', id: e.id, name: 'Enraged' });
+    }
+  }
+
+  /** A monster speaks: bosses taunt the group. */
+  say(e: Entity, text: string) {
+    if (this.player && dist(this.player, e) < 80) this.log(`${e.name} says, “${text}”`, 'say');
   }
 
   private reward(d: Entity, killer: Entity) {
@@ -1216,13 +1364,17 @@ export class World {
     const ch = this.char!;
     let total = 0;
     for (const v of d.dmgBy.values()) total += v;
-    const mine = d.dmgBy.get(p.id) ?? 0;
+    // the party's damage counts as yours
+    const party = this.partyIds();
+    let mine = 0;
+    for (const id of party) mine += d.dmgBy.get(id) ?? 0;
     const share = total > 0 ? mine / total : 0;
     const con = conColor(p.level, d.level);
     if (d.kind === 'mob') {
-      if (share < 0.5 && killer !== p) return;
+      if (share < 0.5 && !party.has(killer.id)) return;
       ch.kills++;
-      const xp = Math.round(mobXp(d.level) * CON_XP[con] * (d.named ? 3 : 1));
+      const rankMul = d.rank === 'boss' ? 8 : d.rank === 'mini' ? 4 : d.rank === 'elite' ? 2 : d.named ? 3 : 1;
+      const xp = Math.round(mobXp(d.level) * CON_XP[con] * rankMul * GROUP_XP[Math.min(3, ch.party.length)]);
       if (xp > 0) this.gainXp(xp, con === 'grey' ? '' : ` (${con})`);
       this.loot(d, con);
       const task = ch.task;
@@ -1284,6 +1436,7 @@ export class World {
     p.power = p.maxPower;
     this.log(`You have reached level ${ch.level}!`, 'xp');
     this.events.push({ type: 'levelup', level: ch.level });
+    for (const c of this.companions()) this.levelCompanion(c);
     this.log(`You get ${pointsForLevel(ch.level)} specialization points. You have ${freePoints(ch.level, ch.specs)} to spend: open Abilities (K) to train.`, 'system');
   }
 
@@ -1365,13 +1518,25 @@ export class World {
   private loot(d: Entity, con: string) {
     const ch = this.char!;
     if (con === 'grey') return;
-    const copper = Math.round((d.level * 9 + this.rng.range(0, d.level * 8)) * (d.named ? 6 : 1));
+    const mul = d.rank === 'boss' ? 12 : d.rank === 'mini' ? 5 : d.named ? 6 : d.rank === 'elite' ? 1.5 : 1;
+    let copper = Math.round((d.level * 9 + this.rng.range(0, d.level * 8)) * mul);
+    const cut = Math.round(copper * 0.1 * ch.party.length);
+    copper -= cut;
     ch.copper += copper;
-    this.log(`You pick up ${moneyText(copper)}.`, 'loot');
-    const chance = d.named ? 1 : d.mob?.shape === 'humanoid' ? 0.26 : 0.16;
-    if (this.rng.chance(chance)) {
-      const it = makeItem(this.rng, ch.cls, d.level, d.named ? { rarity: this.rng.chance(0.4) ? 3 : 2 } : {});
-      this.giveItem(it);
+    this.log(`You pick up ${moneyText(copper)}.${cut ? ` (Your companions take ${moneyText(cut)}.)` : ''}`, 'loot');
+    if (d.rank === 'boss') {
+      // a boss always drops two artifacts named for it
+      for (let i = 0; i < 2; i++) {
+        const it = makeItem(this.rng, ch.cls, d.level + 1, { rarity: 3 });
+        it.name = `${d.name.replace(/^The /, '')}’s ${it.name}`;
+        this.giveItem(it);
+      }
+    } else {
+      const chance = d.named || d.rank === 'mini' ? 1 : d.mob?.shape === 'humanoid' ? 0.26 : d.rank === 'elite' ? 0.24 : 0.16;
+      if (this.rng.chance(chance)) {
+        const it = makeItem(this.rng, ch.cls, d.level, d.named || d.rank === 'mini' ? { rarity: this.rng.chance(0.4) ? 3 : 2 } : {});
+        this.giveItem(it);
+      }
     }
     if (this.rng.chance(0.06)) {
       const kind = CLASSES[ch.cls].powerStat ? (this.rng.chance(0.5) ? 'power' : 'health') : 'health';
@@ -1505,10 +1670,13 @@ export class World {
     ch.x = p.x;
     ch.z = p.z;
     this.log(`You release your spirit and return to ${dest.name}.`, 'system');
+    this.gatherParty(true);
   }
 
   bindPoint(): { x: number; z: number; name: string } {
     const p = this.player!, ch = this.char!;
+    const dg = dungeonAt(p.x, p.z);
+    if (dg) return { ...startOf(dg), name: `the entrance of ${dg.name}` };
     if (Math.hypot(p.x, p.z) < FRONTIER_R + 30) {
       let best: { x: number; z: number; name: string } | null = null, bd = 1e9;
       for (const k of this.keeps) {
@@ -1536,7 +1704,183 @@ export class World {
     p.target = null;
     p.attacking = false;
     this.log(`You are transported to ${name}.`, 'system');
+    this.gatherParty(true);
+    if (this.instance && !dungeonAt(x, z)) this.clearInstance();
     return true;
+  }
+
+  // ---------- dungeons ----------
+
+  /** Spawns a dungeon's monsters fresh, clearing any other instance. */
+  spawnInstance(d: DungeonDef) {
+    this.clearInstance();
+    this.instance = d.id;
+    for (const s of d.spawns) {
+      s.mobs.forEach((id, i) => {
+        const a = (i / Math.max(1, s.mobs.length)) * Math.PI * 2;
+        const r = s.kind === 'pack' ? 3 : 6;
+        const m = this.makeMob(MOB_BY_ID[id], s.level - (s.kind === 'pack' ? 0 : 1), s.x + Math.cos(a) * r, s.z + Math.sin(a) * r, undefined, { rank: 'elite' });
+        m.dungeon = d.id;
+        this.add(m);
+      });
+      if (s.boss) {
+        const b = BOSSES[s.boss];
+        const m = this.makeMob(MOB_BY_ID[b.mob], s.level, s.x, s.z, undefined, { boss: b });
+        m.dungeon = d.id;
+        m.facing = Math.PI;
+        this.add(m);
+      }
+    }
+  }
+
+  clearInstance() {
+    if (!this.instance) return;
+    for (const e of this.list.slice()) if (e.dungeon === this.instance) this.remove(e);
+    this.rising = this.rising.filter((r) => this.get(r.id));
+    this.instance = null;
+  }
+
+  enterDungeon(id: string): string | null {
+    const p = this.player!, ch = this.char!;
+    const d = dungeonById(id);
+    if (!d) return 'There is no such place.';
+    if (this.t - p.lastCombat < 8) return 'You can’t go in while in combat!';
+    this.spawnInstance(d);
+    const s = startOf(d);
+    p.x = s.x;
+    p.z = s.z;
+    p.facing = s.facing;
+    p.target = null;
+    p.attacking = false;
+    this.gatherParty(true);
+    this.log(`You enter ${d.name}. Its monsters are levels ${d.levels[0]} to ${d.levels[1]}, and it is meant for a group of four.`, 'system');
+    if (ch.party.length < 2) this.log('Hire companions from the Captain in town before you go far: few heroes survive this alone.', 'system');
+    return null;
+  }
+
+  leaveDungeon(): string | null {
+    const p = this.player!;
+    const d = dungeonAt(p.x, p.z);
+    if (!d) return null;
+    if (this.t - p.lastCombat < 8) return 'You can’t leave while in combat!';
+    const e = this.entrances.find((x) => x.dungeon === d)!;
+    p.x = e.x + Math.cos(e.facing) * 6;
+    p.z = e.z + Math.sin(e.facing) * 6;
+    p.target = null;
+    p.attacking = false;
+    this.clearInstance();
+    this.gatherParty(true);
+    this.log(`You climb back out of ${d.name}. Its monsters will be waiting again next time.`, 'system');
+    return null;
+  }
+
+  // ---------- companions ----------
+
+  companions(): Entity[] {
+    return this.list.filter((e) => e.kind === 'companion' && e.leader === this.player?.id);
+  }
+
+  /** The player and their companions. */
+  partyIds(): Set<number> {
+    const s = new Set<number>();
+    if (this.player) s.add(this.player.id);
+    for (const c of this.companions()) s.add(c.id);
+    return s;
+  }
+
+  static hireCost(level: number) {
+    return 40 + level * level * 3;
+  }
+
+  hire(role: Role): string | null {
+    const ch = this.char!;
+    if (ch.party.length >= 3) return 'Your party is full: three companions at most.';
+    const cost = World.hireCost(ch.level);
+    if (ch.copper < cost) return `Hiring costs ${moneyText(cost)}.`;
+    ch.copper -= cost;
+    const name = realmName(ch.realm, () => this.rng.next());
+    ch.party.push({ role, name });
+    const c = this.spawnCompanion(ch.party.length - 1);
+    this.log(`${name} the ${CLASSES[c.cls!].name} joins you. (${moneyText(cost)})`, 'system');
+    return null;
+  }
+
+  dismiss(slot: number) {
+    const ch = this.char!;
+    const m = ch.party[slot];
+    if (!m) return;
+    for (const c of this.companions()) this.remove(c);
+    ch.party.splice(slot, 1);
+    this.log(`${m.name} leaves your company.`, 'system');
+    ch.party.forEach((_, i) => this.spawnCompanion(i));
+  }
+
+  private spawnCompanion(slot: number): Entity {
+    const ch = this.char!, p = this.player!;
+    const m = ch.party[slot];
+    const cls = classFor(ch.realm, m.role);
+    const at = this.behind(p, slot);
+    const e = this.makeCombatant('companion', cls, ch.realm, ch.level, at.x, at.z, m.name);
+    e.leader = p.id;
+    e.slot = slot;
+    e.title = CLASSES[cls].name;
+    return this.add(e);
+  }
+
+  /** A spot a little behind someone, or right on them if a wall is in the way. */
+  private behind(p: Entity, slot: number) {
+    const x = p.x - Math.cos(p.facing) * (2 + slot), z = p.z - Math.sin(p.facing) * (2 + slot);
+    const dg = dungeonAt(p.x, p.z);
+    return dg && !(walkable(dg, x, z, 0.6) && dungeonLos(dg, p.x, p.z, x, z)) ? { x: p.x, z: p.z } : { x, z };
+  }
+
+  private levelCompanion(e: Entity) {
+    const ch = this.char!;
+    e.level = ch.level;
+    const builds = BUILDS[e.cls!];
+    e.specs = autoSpec(e.cls!, e.level, builds[e.id % builds.length]);
+    this.applyDerived(e);
+    e.hp = e.maxHp;
+    e.power = e.maxPower;
+    e.abilities = knownAbilities(e.cls!, e.specs);
+  }
+
+  /** Brings the party to the player; with revive, the fallen get up too. */
+  gatherParty(revive: boolean) {
+    const p = this.player;
+    if (!p) return;
+    for (const c of this.companions()) {
+      if (c.dead) {
+        if (!revive) continue;
+        this.remove(c);
+        const n = this.spawnCompanion(c.slot!);
+        n.hp = Math.round(n.maxHp * 0.6);
+        continue;
+      }
+      Object.assign(c, this.behind(p, c.slot!));
+      c.target = null;
+      c.attacking = false;
+      c.threat.clear();
+    }
+  }
+
+  /** Fallen companions get up once the fighting has stopped for a while. */
+  private reviveCompanions() {
+    const p = this.player;
+    if (!p) return;
+    const party = this.partyIds();
+    for (const c of this.companions()) {
+      if (!c.dead || this.t - c.deadAt < 10 || this.t - p.lastCombat < 10) continue;
+      let fighting = false;
+      this.near(c.x, c.z, 40, (o) => { if (!o.dead && o.target != null && party.has(o.target) && this.hostile(o, c)) fighting = true; });
+      if (fighting) continue;
+      this.remove(c);
+      const n = this.spawnCompanion(c.slot!);
+      n.x = c.x;
+      n.z = c.z;
+      n.hp = Math.round(n.maxHp * 0.5);
+      this.log(`${n.name} gets back up.`, 'system');
+    }
   }
 
   travelOptions(): { label: string; x: number; z: number; name: string }[] {
@@ -1563,7 +1907,7 @@ export class World {
     const ch = this.char!;
     const lv = ch.level;
     const town = siteById(`town${ch.realm}`);
-    const cands = Object.values(MOB_BY_ID).filter((m) => m.levels[0] <= lv + 1 && m.levels[1] >= lv && (!m.realms || m.realms.includes(ch.realm)) && m.id !== 'rat');
+    const cands = Object.values(MOB_BY_ID).filter((m) => m.levels[0] <= lv + 1 && m.levels[1] >= lv && (!m.realms || m.realms.includes(ch.realm)) && m.id !== 'rat' && !m.dungeon);
     if (!cands.length) return null;
     const r = new Rng(this.seed + ch.kills * 13 + lv);
     const m = r.pick(cands);
@@ -1599,9 +1943,15 @@ export class World {
   }
 
   /** The thing the player can interact with right now, if any. */
-  interactable(): Entity | KeepState | null {
+  interactable(): Interactable | null {
     const p = this.player;
     if (!p || p.dead) return null;
+    for (const en of this.entrances) if (Math.hypot(p.x - en.x, p.z - en.z) < 8) return { portal: 'enter', dungeon: en.dungeon, x: en.x, z: en.z };
+    const dg = dungeonAt(p.x, p.z);
+    if (dg) {
+      const s = startOf(dg);
+      if (Math.hypot(p.x - (s.x - 4), p.z - s.z) < 5) return { portal: 'leave', dungeon: dg, x: s.x - 4, z: s.z };
+    }
     let best: Entity | null = null, bd = 7;
     this.near(p.x, p.z, 7, (o) => {
       if ((o.kind === 'npc' || (o.kind === 'soldier' && !o.dead && this.t - o.lastCombat > 3)) && o.realm === p.realm) {

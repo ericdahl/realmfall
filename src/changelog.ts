@@ -7,6 +7,18 @@ export interface Release { version: string; date: string; title: string; notes: 
 
 export const CHANGELOG: Release[] = [
   {
+    version: '0.7.0',
+    date: '2026-11-28',
+    title: 'Dungeons, companions and new monsters',
+    notes: [
+      'Each realm has a dungeon for a group of four, levels 13 to 18: Barrowdeep, an old king’s barrow under Valmora’s downs; Rotheart Hollow, a grove gone sour beneath Eldwyn’s wood; and Hrimgard Deep, the ice caves under Hroth’s glacier. Their doors are on the war map.',
+      'Inside: packs of elite monsters that come together, two lieutenants, and a boss with a script. The Barrow King calls up his dead, the Rotheart roots the whole party and sheds wisps, and Hrimthurs breathes frost and cracks open the walls. Bosses always drop two artifacts named for them. Every visit starts fresh; die inside and you wake at the dungeon’s door.',
+      'The new Captain in every town hires companions: up to three, your level and realm, any of the five roles. They follow you, fight what you fight, hold monsters off the others if they are tanks, heal and bless the party if they are healers, and get back up once a fight is over. Click a companion’s frame under yours to target them. They take a tenth of the coin you find, and a fuller party earns a little less experience per kill.',
+      'Twelve new monsters, each with a trick: skeletons that get back up once, will-o’-wisps that burst when they die, ice wraiths you cannot see until they are close, grave callers who mend their friends, hill ogres who rush you, brigand chiefs who fly into a rage, plus shore crabs, storm harpies, ghouls, spriggans, ice crawlers and frost giants.',
+      'Your heroes keep everything; their company starts empty.',
+    ],
+  },
+  {
     version: '0.6.0',
     date: '2026-11-28',
     title: 'Realm abilities',

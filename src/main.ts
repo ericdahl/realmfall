@@ -57,9 +57,9 @@ function boot() {
   renderer.plateInfo = (e: Entity) => {
     const p = world.player;
     if (!p) return { text: e.name, color: '#fff', show: e.kind !== 'mob' };
-    if (e.kind === 'mob') return { text: e.named ? e.name : e.name, color: CON_HEX[conColor(p.level, e.level)], show: true };
+    if (e.kind === 'mob') return { text: e.name, sub: e.rank === 'boss' ? '<Boss>' : e.rank === 'mini' ? '<Lieutenant>' : e.rank === 'elite' ? '<Elite>' : undefined, color: CON_HEX[conColor(p.level, e.level)], show: true };
     if (e.kind === 'npc') return { text: e.name.split(' the ')[0], sub: `<${e.name.split(' the ')[1] ?? ''}>`, color: '#a6e3a1', show: true };
-    if (e.realm === p.realm) return { text: e.name, sub: e.kind === 'soldier' ? `<${REALM_DEFS[e.realm as number].name} Warband>` : undefined, color: '#8fd7ff', show: true };
+    if (e.realm === p.realm) return { text: e.name, sub: e.kind === 'soldier' ? `<${REALM_DEFS[e.realm as number].name} Warband>` : e.kind === 'companion' ? `<${e.title}>` : undefined, color: e.kind === 'companion' ? '#a6f0a0' : '#8fd7ff', show: true };
     const realmName = e.realm === -1 ? 'Mistborn' : REALM_DEFS[e.realm as number].name;
     return { text: e.name, sub: e.kind === 'soldier' || e.kind === 'adventurer' ? `<${realmName} ${e.cls ? CLASSES[e.cls].name : ''}>` : undefined, color: '#ff6b5a', show: true };
   };

@@ -5,6 +5,9 @@ import { REALM_DEFS } from '../src/game/geo';
 import { LINES, autoSpec, BUILDS, freePoints, lineCost, pointsAt, respecCost, spent } from '../src/game/specs';
 import { migrateChar } from '../src/ui/save';
 import { realmLevel, realmLevelText, raFree } from '../src/game/realm';
+import { DUNGEONS, startOf, walkable, los as dungeonLos, route as dungeonRoute } from '../src/game/dungeon';
+import { dist } from '../src/game/world';
+import { classFor, type ClassId } from '../src/game/data';
 
 describe('realm war', () => {
   it('keeps change hands within twenty minutes, and no realm takes everything', () => {
@@ -440,4 +443,222 @@ describe('realm abilities', () => {
     expect(old.freeRespec).toBeUndefined();
     expect(old.ras).toEqual({});
   });
+});
+
+describe('dungeons', () => {
+  const d0 = DUNGEONS[0];
+
+  it('rooms connect through doorways and walls block sight', () => {
+    const s = startOf(d0);
+    expect(walkable(d0, s.x, s.z, 0.6)).toBe(true);
+    const boss = d0.spawns.find((x) => x.kind === 'boss')!;
+    // walk the route from the door to the boss: every step stays inside
+    let x = s.x, z = s.z;
+    for (let i = 0; i < 4000 && Math.hypot(boss.x - x, boss.z - z) > 1; i++) {
+      const wp = dungeonRoute(d0, x, z, boss.x, boss.z);
+      const dd = Math.hypot(wp.x - x, wp.z - z);
+      x += ((wp.x - x) / dd) * Math.min(0.5, dd);
+      z += ((wp.z - z) / dd) * Math.min(0.5, dd);
+      expect(walkable(d0, x, z)).toBe(true);
+    }
+    expect(Math.hypot(boss.x - x, boss.z - z)).toBeLessThan(1.5);
+    expect(dungeonLos(d0, s.x, s.z, boss.x, boss.z)).toBe(false);
+    expect(dungeonLos(d0, s.x, s.z, s.x + 6, s.z)).toBe(true);
+  });
+
+  it('entering spawns it fresh, leaving clears it, and dying inside brings you back to its door', () => {
+    const w = new World(60, { populate: false, headless: true });
+    const ch = World.newChar('Bot', 0, 'warden', 60);
+    ch.level = 15;
+    const p = w.spawnPlayer(ch);
+    const en = w.entrances[0];
+    p.x = en.x + 2; p.z = en.z;
+    const it = w.interactable();
+    expect(it && 'portal' in it && it.portal).toBe('enter');
+    expect(w.enterDungeon(d0.id)).toBeNull();
+    expect(w.geo.zoneAt(p.x, p.z).kind).toBe('dungeon');
+    const inside = w.list.filter((e) => e.dungeon === d0.id);
+    expect(inside.some((e) => e.rank === 'boss')).toBe(true);
+    expect(inside.filter((e) => e.rank === 'mini')).toHaveLength(2);
+    w.kill(p, inside[0]);
+    w.release();
+    expect(Math.hypot(p.x - startOf(d0).x, p.z - startOf(d0).z)).toBeLessThan(1);
+    p.lastCombat = -99;
+    expect(w.leaveDungeon()).toBeNull();
+    expect(w.list.some((e) => e.dungeon === d0.id)).toBe(false);
+    expect(w.geo.zoneAt(p.x, p.z).kind).toBe('home');
+  });
+
+  it('new monsters have their tricks: skeletons rise, wisps burst, wraiths lurk, callers mend, chiefs rage', () => {
+    const w = new World(61, { populate: false, headless: true });
+    const ch = World.newChar('Bot', 0, 'warden', 61);
+    ch.level = 14;
+    ch.x = -606; ch.z = 350;
+    const p = w.spawnPlayer(ch);
+    const sk = w.add(w.makeMob(MOB_BY_ID.skeleton, 12, p.x + 3, p.z));
+    w.kill(sk, p);
+    w.run(4);
+    const risen = w.list.find((e) => e.mob?.id === 'skeleton' && !e.dead)!;
+    expect(risen.rose).toBe(true);
+    w.kill(risen, p);
+    w.run(4);
+    expect(w.list.some((e) => e.mob?.id === 'skeleton' && !e.dead)).toBe(false);
+    const wisp = w.add(w.makeMob(MOB_BY_ID.wisp, 12, p.x + 2, p.z));
+    const hp = p.hp;
+    w.kill(wisp, p);
+    expect(p.hp).toBeLessThan(hp);
+    const wr = w.add(w.makeMob(MOB_BY_ID.ice_wraith, 14, p.x + 10, p.z));
+    expect(w.canSee(p, wr)).toBe(false);
+    p.x = wr.x - 2;
+    expect(w.canSee(p, wr)).toBe(true);
+    const gc = w.add(w.makeMob(MOB_BY_ID.grave_caller, 14, -580, 300));
+    const pal = w.add(w.makeMob(MOB_BY_ID.ghoul, 14, -582, 300));
+    pal.hp = Math.round(pal.maxHp * 0.3);
+    gc.ai.mode = 'combat';
+    gc.target = p.id;
+    p.x = gc.x + 12; p.z = gc.z;
+    let healed = false;
+    for (let i = 0; i < 20 * 20 && !healed; i++) { w.tick(0.05); healed = pal.hp > pal.maxHp * 0.3 + 5; }
+    expect(healed).toBe(true);
+    const chief = w.add(w.makeMob(MOB_BY_ID.brigand_chief, 12, -560, 280));
+    const dmg = chief.dmgMul;
+    chief.hp = Math.round(chief.maxHp * 0.2);
+    w.bossTick(chief);
+    expect(chief.enraged).toBe(true);
+    expect(chief.dmgMul).toBeCloseTo(dmg * 1.5);
+  });
+});
+
+describe('companions', () => {
+  const hero = (cls: ClassId = 'warden', level = 16) => {
+    const w = new World(70, { populate: false, headless: true });
+    const ch = World.newChar('Bot', CLASSES[cls].realm, cls, 70);
+    ch.level = level;
+    ch.specs = autoSpec(cls, level, BUILDS[cls][0]);
+    ch.copper = 100000;
+    ch.x = -606; ch.z = 350;
+    const p = w.spawnPlayer(ch);
+    return { w, ch, p };
+  };
+
+  it('hire up to three, they follow, and dismissing one keeps the rest', () => {
+    const { w, ch, p } = hero();
+    for (const r of ['healer', 'caster', 'archer'] as const) expect(w.hire(r)).toBeNull();
+    expect(w.hire('tank')).toMatch(/full/);
+    expect(w.companions()).toHaveLength(3);
+    expect(w.companions().map((c) => c.cls).sort()).toEqual(['cleric', 'wizard', 'yeoman']);
+    expect(ch.copper).toBe(100000 - 3 * World.hireCost(16));
+    for (let i = 0; i < 20 * 8; i++) { w.input.mx = 1; w.input.mz = 0; w.tick(0.05); }
+    w.input.mx = 0;
+    w.run(4);
+    for (const c of w.companions()) expect(dist(c, p)).toBeLessThan(9);
+    w.dismiss(1);
+    expect(ch.party.map((m) => m.role)).toEqual(['healer', 'archer']);
+    expect(w.companions()).toHaveLength(2);
+  });
+
+  it('they fight what you fight, heal you, and get up after the fight', () => {
+    const { w, ch, p } = hero();
+    for (const r of ['healer', 'caster', 'tank'] as const) w.hire(r);
+    w.run(1);
+    const m = w.add(w.makeMob(MOB_BY_ID.troll, 17, p.x + 12, p.z, undefined, { rank: 'elite' }));
+    p.target = m.id;
+    p.attacking = true;
+    w.engage(p, m);
+    p.hp = Math.round(p.maxHp * 0.7);
+    for (let i = 0; i < 20 * 120 && !m.dead; i++) w.tick(0.05);
+    const healer = w.companions().find((c) => c.cls === 'cleric')!;
+    const healed = w.events.some((ev) => ev.type === 'heal' && ev.id === p.id && ev.src === healer.id && ev.amount > 0);
+    expect(m.dead).toBe(true);
+    expect(healed).toBe(true);
+    const share = [...m.dmgBy.entries()].filter(([id]) => id !== p.id).reduce((a, [, v]) => a + v, 0);
+    expect(share).toBeGreaterThan(0);
+    expect(ch.xp).toBeGreaterThan(0); // the party's kill is yours
+    const c = w.companions()[0];
+    w.kill(c, m);
+    w.run(25);
+    expect(w.companions().every((x) => !x.dead)).toBe(true);
+  });
+
+  it('the tank holds what is hitting the others', () => {
+    const { w, p } = hero('wizard');
+    w.hire('tank');
+    w.run(1);
+    const m = w.add(w.makeMob(MOB_BY_ID.brigand, 15, p.x + 4, p.z));
+    w.engage(m, p);
+    m.target = p.id;
+    m.threat.set(p.id, 40);
+    w.run(10);
+    expect(m.dead || m.target === w.companions()[0].id).toBe(true);
+  });
+
+  it('heroes from 0.6 come with an empty company', () => {
+    const old = { ...World.newChar('Old', 2, 'seer', 71), version: 4 } as any;
+    delete old.party;
+    migrateChar(old);
+    expect(old.party).toEqual([]);
+    expect(old.version).toBe(SAVE_VERSION);
+  });
+
+  it('a lieutenant falls to a group of four, but not to one hero alone', () => {
+    const fight = (group: boolean) => {
+      const { w, p } = hero('warden', 16);
+      if (group) for (const r of ['healer', 'caster', 'archer'] as const) w.hire(r);
+      const d0 = DUNGEONS[0];
+      w.spawnInstance(d0);
+      const mini = w.list.find((e) => e.boss === 'lady_ashgrave')!;
+      p.lastCombat = -99;
+      p.x = mini.x - 8; p.z = mini.z;
+      w.gatherParty(false);
+      p.target = mini.id;
+      p.attacking = true;
+      for (let i = 0; i < 20 * 240 && !mini.dead && !p.dead; i++) {
+        if (!p.queuedStyle && p.endu > 15) w.useAbility(p, p.lastStyle?.id === 'slash' && p.abilities.includes('backhand') ? 'backhand' : 'slash');
+        w.tick(0.05);
+      }
+      return { won: mini.dead, alive: !p.dead };
+    };
+    const g = fight(true);
+    expect(g.won).toBe(true);
+    const solo = fight(false);
+    expect(solo.won && solo.alive).toBe(false);
+  }, 60000);
+});
+
+describe('dungeon bosses', () => {
+  const attempt = (dungeon: number, seed: number, level: number, group: boolean) => {
+    const d = DUNGEONS[dungeon];
+    const w = new World(seed, { populate: false, headless: true });
+    const cls = classFor(d.realm, 'tank');
+    const ch = World.newChar('Bot', d.realm, cls, seed);
+    ch.level = level;
+    ch.specs = autoSpec(cls, level, BUILDS[cls][0]);
+    ch.copper = 1e6;
+    const p = w.spawnPlayer(ch);
+    if (group) for (const r of ['healer', 'caster', 'archer'] as const) w.hire(r);
+    w.spawnInstance(d);
+    const boss = w.list.find((e) => e.rank === 'boss')!;
+    p.x = boss.x - 10; p.z = boss.z;
+    w.gatherParty(false);
+    p.target = boss.id;
+    p.attacking = true;
+    const opener = cls === 'huskarl' ? 'cleave' : 'slash';
+    for (let i = 0; i < 20 * 300 && !boss.dead && !p.dead; i++) {
+      // a plain tank: close in, keep swinging, turn on adds once the boss's are dead
+      const t = w.get(p.target) ?? boss;
+      if (t.dead) { p.target = (w.list.find((e) => e.dungeon && !e.dead && e.target != null) ?? boss).id; p.attacking = true; }
+      if (Math.hypot(t.x - p.x, t.z - p.z) > t.radius + 2.5) w.moveToward(p, t.x, t.z, 0.05, t.radius + 2);
+      if (!p.queuedStyle && p.endu > 15) w.useAbility(p, opener);
+      w.tick(0.05);
+    }
+    return boss.dead && !p.dead;
+  };
+
+  it('a level 18 group of four beats each boss most of the time; a hero alone does not', () => {
+    for (let d = 0; d < DUNGEONS.length; d++) {
+      const wins = [301, 302, 303].filter((seed) => attempt(d, seed, 18, true)).length;
+      expect(wins, DUNGEONS[d].name).toBeGreaterThanOrEqual(2);
+      expect(attempt(d, 304, 18, false), `${DUNGEONS[d].name} solo`).toBe(false);
+    }
+  }, 120000);
 });

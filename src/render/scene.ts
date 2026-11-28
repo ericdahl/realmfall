@@ -6,6 +6,8 @@ import { ABILITIES } from '../game/data';
 import { buildTerrain, buildWater } from './terrain';
 import { buildProps } from './props';
 import { buildStructures, ownerColor, type KeepView } from './structures';
+import { buildDungeons, THEMES } from './dungeons';
+import { dungeonAt } from '../game/dungeon';
 import { buildRig, animate, attachGlow, schoolColor, type Rig } from './models';
 
 export interface PlateInfo { text: string; sub?: string; color: string; show: boolean }
@@ -118,6 +120,7 @@ export class Renderer {
     this.scene.add(buildProps(w.geo));
     const st = buildStructures(w);
     this.scene.add(st.group);
+    this.scene.add(buildDungeons(w));
     this.keepViews = st.keepViews;
     this.portals = st.portals;
 
@@ -172,6 +175,25 @@ export class Renderer {
     (this.scene.fog as THREE.Fog).color.copy(hor);
     (this.stars.material as THREE.PointsMaterial).opacity = (1 - day) * 0.9;
     const p = this.focus;
+    // underground: no sky, close dark fog, light from the torches' colour
+    const dg = dungeonAt(p.x, p.z);
+    const fog = this.scene.fog as THREE.Fog;
+    this.sky.visible = this.clouds.visible = this.stars.visible = !dg;
+    if (dg) {
+      const th = THEMES[dg.theme];
+      fog.color.set(th.fog);
+      fog.near = 26;
+      fog.far = 95;
+      this.hemi.intensity = 2.3;
+      this.hemi.color.set(th.ambient);
+      this.sun.intensity = 1.1;
+      this.sun.color.set(th.glow);
+      lightDir.set(0.25, 1, 0.35).normalize();
+      this.renderer.setClearColor(th.fog);
+    } else {
+      fog.near = 140;
+      fog.far = 900;
+    }
     this.sun.position.set(p.x + lightDir.x * 200, p.y + lightDir.y * 200, p.z + lightDir.z * 200);
     this.sun.target.position.copy(p);
     this.renderer.toneMappingExposure = 0.85 + day * 0.2;
