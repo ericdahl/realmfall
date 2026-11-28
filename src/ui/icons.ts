@@ -153,6 +153,7 @@ function draw(g: CanvasRenderingContext2D, key: string) {
     case 'moonblade': draw(g, 'dagger'); g.lineWidth = 2; g.beginPath(); g.arc(46, 20, 10, 2, 5); g.stroke(); break;
     case 'claws': g.lineWidth = 4; for (const o of [-12, 0, 12]) { g.beginPath(); g.moveTo(22 + o, 10); g.quadraticCurveTo(40 + o, 30, 26 + o, 56); g.stroke(); } break;
     case 'pounce': draw(g, 'claws'); g.lineWidth = 2; g.beginPath(); g.arc(32, 46, 22, Math.PI * 1.1, Math.PI * 1.9); g.stroke(); break;
+    case 'purge': g.lineWidth = 3; circle(g, 32, 32, 20); for (let i = 0; i < 6; i++) { const a = (i / 6) * Math.PI * 2; line(g, [32 + Math.cos(a) * 8, 32 + Math.sin(a) * 8, 32 + Math.cos(a) * 26, 32 + Math.sin(a) * 26]); } circle(g, 32, 32, 6, true); break;
     default: circle(g, 32, 32, 14);
   }
 }

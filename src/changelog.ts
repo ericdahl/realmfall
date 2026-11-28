@@ -7,6 +7,18 @@ export interface Release { version: string; date: string; title: string; notes: 
 
 export const CHANGELOG: Release[] = [
   {
+    version: '0.6.0',
+    date: '2026-11-28',
+    title: 'Realm abilities',
+    notes: [
+      'Realm points now buy something. Each realm rank has ten realm levels (shown as 3L4), and every realm level gives a realm ability point.',
+      'Spend them in the new Realm window (L, or the Realm button, which glows when you can buy). Passives come in five levels: Toughness, Augmented Strength, Constitution, Dexterity or Acuity, Mastery of Arms, Mastery of Magery, Mastery of Healing, Determination (stuns, roots and snares wear off sooner), Avoidance of Magic, Dodger and Long Wind.',
+      'Actives go on your hotbar: Purge breaks every stun, root, snare and poison and works while stunned; Ignore Pain heals 40% of your health; Charge makes you fast and unstoppable for 15 seconds; Raging Power refills your power.',
+      'You can respec your realm abilities for copper. The K key now opens only the Abilities window; L opens the Realm window.',
+      'Your existing heroes keep the realm points they have earned and can spend them right away.',
+    ],
+  },
+  {
     version: '0.5.1',
     date: '2026-11-27',
     title: 'Valmora wears red, Hroth wears blue',

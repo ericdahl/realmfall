@@ -15,10 +15,11 @@ import { thinkMob, thinkCombatant } from './ai';
 import { War, type KeepState } from './war';
 import { populate } from './spawn';
 import { clamp } from './noise';
+import { raValue, raActives, raFree, raBlocked, raCost, raRespecCost, RA_BY_ID, type RaId } from './realm';
 import { LINES, BUILDS, autoSpec, baseSpecs, knownAbilities, lineOf, passiveFrac, freePoints, pointsForLevel, respecCost } from './specs';
 
-/** 2: specialization lines (`specs`). 3: a class for each realm (`cls`). */
-export const SAVE_VERSION = 3;
+/** 2: specialization lines (`specs`). 3: a class for each realm (`cls`). 4: realm abilities (`ras`). */
+export const SAVE_VERSION = 4;
 export const TICK = 1 / 20;
 
 export interface Segment { ax: number; az: number; bx: number; bz: number; door?: number }
@@ -219,7 +220,7 @@ export class World {
   applyDerived(e: Entity) {
     if (!e.cls) return;
     const gear = e.kind === 'player' && this.char ? this.char.equip : undefined;
-    const d = classDerived(e.cls, e.level, gear);
+    const d = classDerived(e.cls, e.level, gear, e.ras);
     const hpFrac = e.maxHp > 1 ? e.hp / e.maxHp : 1;
     e.stats = d.stats;
     e.maxHp = Math.round(d.maxHp * e.hpMul);
@@ -254,7 +255,7 @@ export class World {
     knownAbilities(cls, specs).forEach((a, i) => (hotbar[i] = a));
     return {
       version: SAVE_VERSION, id: `${Date.now().toString(36)}${Math.floor(rng.next() * 1e6).toString(36)}`,
-      name, realm, cls, level: 1, xp: 0, copper: 150, rp: 0, specs,
+      name, realm, cls, level: 1, xp: 0, copper: 150, rp: 0, specs, ras: {},
       equip: starterKit(rng, cls), bag: [], potions: { health: 3, power: CLASSES[cls].powerStat ? 2 : 0 },
       hotbar, x: town.x + Math.cos(town.facing) * 8, z: town.z + Math.sin(town.facing) * 8,
       kills: 0, realmKills: 0, deaths: 0, task: null, created: Date.now(), played: 0,
@@ -266,11 +267,12 @@ export class World {
     const e = this.baseEntity('player', char.name, char.realm, char.level, char.x, char.z);
     e.cls = char.cls;
     e.specs = char.specs;
+    e.ras = char.ras;
     this.player = e;
     this.applyDerived(e);
     e.hp = e.maxHp;
     e.power = e.maxPower;
-    e.abilities = knownAbilities(char.cls, char.specs);
+    e.abilities = [...knownAbilities(char.cls, char.specs), ...raActives(char.ras)];
     const town = siteById(`town${char.realm}`);
     e.facing = Math.atan2(town.z - char.z, town.x - char.x) + Math.PI;
     this.add(e);
@@ -434,7 +436,7 @@ export class World {
       e.hp = Math.min(e.maxHp, e.hp + e.maxHp * hpRate);
       if (e.maxPower) e.power = Math.min(e.maxPower, e.power + e.maxPower * (ooc ? 0.07 : 0.012));
       if (e.sprinting && e.moved > 0) {
-        e.endu = Math.max(0, e.endu - 5);
+        e.endu = Math.max(0, e.endu - 5 * (1 - raValue(e.ras, 'long_wind')));
         if (e.endu <= 0) {
           e.sprinting = false;
           this.plog(e, 'You are too tired to sprint.', 'error');
@@ -614,8 +616,21 @@ export class World {
     if (def.type === 'hot') { perTick = Math.max(1, Math.round(healAmt)); name = def.name ?? 'Renew'; }
     if (def.type === 'absorb') { value = Math.round(e.maxHp * def.value); name = def.name ?? 'Rune Ward'; }
     if (def.type === 'restore') {
-      e.endu = Math.min(100, e.endu + def.value);
-      this.plog(e, 'You catch your second wind.', 'spell');
+      if (def.what === 'hp') {
+        e.hp = Math.min(e.maxHp, e.hp + Math.round(e.maxHp * def.value));
+        this.plog(e, 'You shrug off your wounds.', 'heal');
+      } else if (def.what === 'power') {
+        e.power = Math.min(e.maxPower, e.power + e.maxPower * def.value);
+        this.plog(e, 'Power surges through you.', 'spell');
+      } else {
+        e.endu = Math.min(100, e.endu + def.value);
+        this.plog(e, 'You catch your second wind.', 'spell');
+      }
+      return;
+    }
+    if (def.type === 'purge') {
+      e.effects = e.effects.filter((f) => !(f.type === 'stun' || f.type === 'root' || f.type === 'snare' || f.type === 'dot' || f.type === 'taunt' || (f.type === 'buff' && f.value < 0)));
+      this.plog(e, 'You purge every ill effect from yourself!', 'spell');
       return;
     }
     if (def.type === 'thorns') name = 'Thorn Skin';
@@ -660,7 +675,9 @@ export class World {
     }
     // same effect from the same kind replaces
     const existing = e.effects.findIndex((f) => f.type === def.type && f.name === name);
-    const eff: Effect = { type: def.type, name, until: now + def.dur, start: now, value, stat, src: src.id, perTick, nextTick: now + 1, proc: def.type === 'imbue' ? def.proc : undefined };
+    // Determination shortens what holds you
+    const dur = def.type === 'stun' || def.type === 'root' || def.type === 'snare' ? def.dur * (1 - raValue(e.ras, 'determination')) : def.dur;
+    const eff: Effect = { type: def.type, name, until: now + dur, start: now, value, stat, src: src.id, perTick, nextTick: now + 1, proc: def.type === 'imbue' ? def.proc : undefined };
     if (existing >= 0) e.effects[existing] = eff;
     else e.effects.push(eff);
     if (def.type === 'taunt') {
@@ -847,9 +864,10 @@ export class World {
 
   /** Weapon lines: three-quarters damage at 1, full damage at your level. */
   weaponSpec(a: Entity, ranged: boolean) {
-    if (!a.cls || !a.specs) return 1;
+    const arms = 1 + raValue(a.ras, 'mastery_arms');
+    if (!a.cls || !a.specs) return arms;
     const f = passiveFrac(a.cls, a.specs, a.level, ranged ? 'ranged' : 'melee');
-    return f === null ? 1 : 0.75 + 0.25 * f;
+    return (f === null ? 1 : 0.75 + 0.25 * f) * arms;
   }
 
   /** The level a spell or heal is cast at: its line's level, never above your own. */
@@ -1003,7 +1021,7 @@ export class World {
     if (!ab) return 'Unknown ability.';
     if (e.dead) return 'You are dead.';
     if (!e.abilities.includes(abId) && e.kind !== 'mob') return `You do not know ${ab.name} yet.`;
-    if (this.stunned(e)) return 'You are stunned!';
+    if (this.stunned(e) && !ab.whileStunned) return 'You are stunned!';
     if ((e.cds[abId] ?? 0) > this.t) return `You must wait ${Math.ceil(e.cds[abId] - this.t)} seconds to use ${ab.name} again!`;
     if (e.cast) return 'You are already busy!';
     if (ab.costType === 'endu' && e.endu < ab.cost) return 'You are too fatigued!';
@@ -1088,7 +1106,8 @@ export class World {
   private spellAmount(e: Entity, ab: AbilityDef) {
     const [a, b] = ab.power!;
     const stat = (e.cls && CLASSES[e.cls].powerStat) || (ab.school === 'holy' ? 'pie' : 'int');
-    const mul = e.mob ? 0.85 * e.dmgMul * (1 + this.buffSum(e, 'dmg')) : this.statMul(e, stat);
+    const mastery = 1 + raValue(e.ras, ab.heal ? 'mastery_healing' : 'mastery_magery');
+    const mul = (e.mob ? 0.85 * e.dmgMul * (1 + this.buffSum(e, 'dmg')) : this.statMul(e, stat)) * mastery;
     return (a + b * this.powerLevel(e, ab)) * mul * this.rng.range(0.9, 1.1);
   }
 
@@ -1139,7 +1158,7 @@ export class World {
           this.reportAvoid(e, v, res);
           continue;
         }
-        ({ amount, crit } = this.mitigate(e, v, this.spellAmount(e, ab), 0.06, false));
+        ({ amount, crit } = this.mitigate(e, v, this.spellAmount(e, ab) * (1 - raValue(v.ras, 'avoid_magic')), 0.06, false));
       } else if (ab.bonus !== undefined) {
         const ranged = ab.school === 'ranged';
         const res = this.defenseRoll(e, v, ranged ? 'ranged' : 'melee');
@@ -1284,6 +1303,35 @@ export class World {
     return null;
   }
 
+  /** Buys the next level of a realm ability. Returns a reason if it can't. */
+  buyRealmAbility(id: RaId): string | null {
+    const ch = this.char!;
+    const ra = RA_BY_ID[id];
+    if (!ra) return 'Unknown realm ability.';
+    const blocked = raBlocked(ch.cls, ra);
+    if (blocked) return `${ra.name}: ${blocked.toLowerCase()}.`;
+    const lv = ch.ras[id] ?? 0;
+    if (lv >= ra.costs.length) return `${ra.name} is already at its highest level.`;
+    const cost = raCost(ra, lv + 1) - raCost(ra, lv);
+    if (raFree(ch.rp, ch.ras) < cost) return `You need ${cost} realm ability points for that.`;
+    ch.ras[id] = lv + 1;
+    if (ra.kind === 'passive') this.log(`${ra.name} rises to level ${lv + 1}.`, 'realm'); // actives: relearn says 'You learn'
+    this.relearn();
+    return null;
+  }
+
+  /** Refunds every realm ability point, for copper. */
+  respecRealm(): string | null {
+    const ch = this.char!;
+    const cost = raRespecCost(ch.rp);
+    if (ch.copper < cost) return `A realm ability respec costs ${moneyText(cost)}.`;
+    ch.copper -= cost;
+    for (const k of Object.keys(ch.ras)) delete ch.ras[k as RaId];
+    this.log(`Your realm abilities are unlearned and their points returned. (${moneyText(cost)})`, 'realm');
+    this.relearn();
+    return null;
+  }
+
   /** Clears every line back to 1 and refunds the points. */
   respec(): string | null {
     const ch = this.char!;
@@ -1301,7 +1349,7 @@ export class World {
   /** After lines change: learn and forget abilities, and keep the hotbar to what you know. */
   private relearn() {
     const ch = this.char!, p = this.player!;
-    const known = knownAbilities(ch.cls, ch.specs);
+    const known = [...knownAbilities(ch.cls, ch.specs), ...raActives(ch.ras)];
     for (const a of known) {
       if (p.abilities.includes(a)) continue;
       this.log(`You learn ${ABILITIES[a].name}!`, 'system');

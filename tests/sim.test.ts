@@ -4,6 +4,7 @@ import { MOB_BY_ID, ABILITIES, CLASS_IDS, CLASSES, ROLES } from '../src/game/dat
 import { REALM_DEFS } from '../src/game/geo';
 import { LINES, autoSpec, BUILDS, freePoints, lineCost, pointsAt, respecCost, spent } from '../src/game/specs';
 import { migrateChar } from '../src/ui/save';
+import { realmLevel, realmLevelText, raFree } from '../src/game/realm';
 
 describe('realm war', () => {
   it('keeps change hands within twenty minutes, and no realm takes everything', () => {
@@ -354,5 +355,89 @@ describe('stealth', () => {
       if (w.events.some((ev) => ev.type === 'swing' && ev.id === e.id && (ev.style === 'ambush' || ev.style === 'garrote'))) opened++;
     }
     expect(opened).toBe(3);
+  });
+});
+
+describe('realm abilities', () => {
+  const hero = (cls: 'warden' | 'wizard' = 'warden', rp = 0) => {
+    const w = new World(50, { populate: false, headless: true });
+    const ch = World.newChar('Bot', CLASSES[cls].realm, cls, 50);
+    ch.level = 20;
+    ch.rp = rp;
+    ch.specs = autoSpec(cls, 20, BUILDS[cls][0]);
+    ch.x = -606; ch.z = 350;
+    const p = w.spawnPlayer(ch);
+    return { w, ch, p };
+  };
+
+  it('ten realm levels to a rank, a point for each', () => {
+    expect(realmLevel(0)).toEqual({ rank: 0, sub: 0, index: 0 });
+    expect(realmLevel(40)).toEqual({ rank: 0, sub: 1, index: 1 });
+    expect(realmLevel(399)).toEqual({ rank: 0, sub: 9, index: 9 });
+    expect(realmLevel(400)).toEqual({ rank: 1, sub: 0, index: 10 });
+    expect(realmLevelText(1200)).toBe('3L0');
+    expect(realmLevel(1e9).index).toBe(90);
+  });
+
+  it('buying levels costs points, and classes can only buy their own', () => {
+    const { w, ch, p } = hero('warden', 400); // 10 points
+    const hp = p.maxHp;
+    expect(w.buyRealmAbility('toughness')).toBeNull(); // 1
+    expect(w.buyRealmAbility('toughness')).toBeNull(); // 2
+    expect(ch.ras.toughness).toBe(2);
+    expect(p.maxHp).toBeGreaterThan(hp);
+    expect(raFree(ch.rp, ch.ras)).toBe(7);
+    expect(w.buyRealmAbility('mastery_magery')).toMatch(/power/);
+    expect(w.buyRealmAbility('purge')).toMatch(/8 realm ability points/);
+    expect(w.buyRealmAbility('charge')).toBeNull();
+    expect(p.abilities).toContain('charge');
+    expect(ch.hotbar).toContain('charge');
+    ch.copper = 5000;
+    expect(w.respecRealm()).toBeNull();
+    expect(ch.ras).toEqual({});
+    expect(p.abilities).not.toContain('charge');
+    expect(ch.hotbar).not.toContain('charge');
+  });
+
+  it('passives do what they say', () => {
+    const { w, ch, p } = hero('warden', 1e6);
+    const before = { str: p.stats.str, evade: p.evade, weapon: w.weaponSpec(p, false) };
+    for (const id of ['aug_str', 'aug_str', 'dodger', 'mastery_arms', 'determination', 'determination', 'avoid_magic'] as const) expect(w.buyRealmAbility(id)).toBeNull();
+    expect(p.stats.str).toBe(before.str + 8);
+    expect(p.evade).toBeCloseTo(before.evade + 0.01);
+    expect(w.weaponSpec(p, false)).toBeCloseTo(before.weapon * 1.03);
+    const m = w.makeMob(MOB_BY_ID.troll, 20, p.x + 2, p.z);
+    w.add(m);
+    w.addEffect(p, m, { type: 'stun', dur: 10 });
+    const stun = p.effects.find((f) => f.type === 'stun')!;
+    expect(stun.until - stun.start).toBeCloseTo(8);
+    expect(ch.ras.avoid_magic).toBe(1);
+  });
+
+  it('Purge works while stunned and clears what holds you', () => {
+    const { w, p } = hero('wizard', 1e6);
+    expect(w.buyRealmAbility('purge')).toBeNull();
+    expect(w.buyRealmAbility('raging_power')).toBeNull();
+    const m = w.makeMob(MOB_BY_ID.troll, 20, p.x + 2, p.z);
+    w.add(m);
+    w.addEffect(p, m, { type: 'stun', dur: 6 });
+    w.addEffect(p, m, { type: 'dot', dur: 10, value: 0.1 }, 50);
+    expect(w.useAbility(p, 'fire_bolt')).toMatch(/stunned/);
+    expect(w.useAbility(p, 'purge')).toBeNull();
+    expect(p.effects.some((f) => f.type === 'stun' || f.type === 'dot')).toBe(false);
+    p.power = 0;
+    expect(w.useAbility(p, 'raging_power')).toBeNull();
+    expect(p.power).toBe(p.maxPower);
+  });
+
+  it('heroes from 0.5 keep their class and lines and start with no realm abilities', () => {
+    const old = { ...World.newChar('Old', 1, 'ranger', 51), version: 3, specs: { archery: 12, hunting: 4, glamour: 7 } } as any;
+    delete old.ras;
+    migrateChar(old);
+    expect(old.version).toBe(SAVE_VERSION);
+    expect(old.cls).toBe('ranger');
+    expect(old.specs).toEqual({ archery: 12, hunting: 4, glamour: 7 });
+    expect(old.freeRespec).toBeUndefined();
+    expect(old.ras).toEqual({});
   });
 });
